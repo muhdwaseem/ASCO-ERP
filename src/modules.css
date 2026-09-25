@@ -5,3 +5,12 @@
 .form-grid .checks label.check { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; }
 .form-grid .checks input { height: auto; }
 .modal .muted { color: #6b6b6b; font-size: 12px; }
+
+/* AI */
+.ai-meta { font-size: 11px; color: #7a7a7a; margin-top: 4px; }
+.ai-a.err { background: var(--warn-fill); color: #9b1c12; }
+.scan-drop { display: flex; align-items: center; gap: 12px; margin: 16px 0; padding: 22px; border: 2px dashed #b9c9be; border-radius: 8px; color: #33523e; cursor: pointer; background: #f6faf7; }
+.scan-drop input { display: none; }
+.scan-result { display: flex; flex-direction: column; gap: 12px; }
+.scan-result .muted { color: #6b6b6b; }
+.scan-result .btn { align-self: flex-start; }

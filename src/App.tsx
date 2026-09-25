@@ -15,10 +15,11 @@ import { ModuleForm, MODULE_FORMS } from './components/ModuleForm';
 import { Grid, colName, fmt, cellValue, type Sel } from './components/Grid';
 import { Ribbon, type ActionGroup } from './components/Ribbon';
 import { JE_COLUMNS, jeEditable, jeEdit, jeRows, JeHeader, postDraft, postDraftLive, demoResolver, useJeDraft, type AccountResolver } from './components/JournalEntry';
-import { LiveDocForm, LIVE_TARGET, type LiveFormKind } from './components/LiveDocForm';
+import { LiveDocForm, LIVE_TARGET, type LiveFormKind, type LivePrefill } from './components/LiveDocForm';
 import { PrintDoc, type PrintKind } from './components/PrintDoc';
 import { DocForm } from './components/DocForm';
 import { AiPanel } from './components/AiPanel';
+import { ScanBill } from './components/ScanBill';
 import { Backstage } from './components/Backstage';
 
 const USER = 'owner@asco.local';
@@ -39,6 +40,7 @@ export default function App() {
   const [form, setForm] = useState<FormKind | null>(null);
   const [liveForm, setLiveForm] = useState<LiveFormKind | null>(null);
   const [moduleForm, setModuleForm] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState<LivePrefill | undefined>(undefined);
   const [formContext, setFormContext] = useState<{ employeeId: number; name?: string } | undefined>(undefined);
   const [printing, setPrinting] = useState<{ kind: PrintKind; id: number } | null>(null);
   const [backstage, setBackstage] = useState(false);
@@ -99,7 +101,7 @@ export default function App() {
   // ---------- view model for the active sheet
   const view = useMemo(() => {
     if (screen.kind === 'journal-entry') return { columns: JE_COLUMNS, rows: jeRows(resolver, draft), editable: jeEditable, onEdit: jeEdit };
-    if (!live && screen.kind === 'ai') return { columns: [] as Col[], rows: [] as Row[] };
+    if (screen.kind === 'ai' || (live && screen.kind === 'scan')) return { columns: [] as Col[], rows: [] as Row[] };
     const notice = (msg: string, style: RowMeta['style'] = 'muted') => ({ columns: [{ key: 'msg', label: screen.label, width: 620 }] as Col[], rows: [{ msg, _meta: { style } }] as Row[] });
     const base = (() => {
       if (!live) return { columns: screen.columns ?? [], rows: screen.rows?.(s) ?? [] };
@@ -437,7 +439,7 @@ export default function App() {
       </div>
 
       <div className="formulabar">
-        <div className="namebox">{!live && screen.kind === 'ai' ? '' : `${colName(sel.c)}${sel.r + 1}`}<ChevronDown size={12} /></div>
+        <div className="namebox">{screen.kind === 'ai' || (live && screen.kind === 'scan') ? '' : `${colName(sel.c)}${sel.r + 1}`}<ChevronDown size={12} /></div>
         <div className="fb-sep">⋮</div>
         <button className="fb-btn" disabled><X size={16} /></button>
         <button className="fb-btn" disabled><Check size={16} /></button>
@@ -454,8 +456,10 @@ export default function App() {
 
       <main className="sheet">
         {screen.kind === 'journal-entry' && <JeHeader onPost={() => postJv()} onDraft={live ? () => postJv(true) : undefined} hint={live ? 'Type account codes from the Chart of Accounts sheet · Post, or save a draft for approval' : undefined} />}
-        {!live && screen.kind === 'ai' ? (
-          <AiPanel />
+        {screen.kind === 'ai' ? (
+          <AiPanel companyId={live ? cid : undefined} />
+        ) : live && screen.kind === 'scan' ? (
+          <ScanBill companyId={cid} onUse={(p) => { setPrefill(p); setLiveForm('purchase-invoice'); }} />
         ) : (
           <Grid columns={view.columns} rows={view.rows} sel={sel} onSel={setSel} zoom={zoom} editable={view.editable} onEdit={view.onEdit} />
         )}
@@ -492,7 +496,7 @@ export default function App() {
         const target: Record<FormKind, string> = { 'sales-invoice': 'sales-invoices', 'purchase-invoice': 'purchase-invoices', receipt: 'receipts', payment: 'payments', expense: 'expenses' };
         setForm(null); openSheet(target[form]); notify(msg);
       }} />}
-      {liveForm && <LiveDocForm kind={liveForm} companyId={cid} context={formContext} onClose={() => setLiveForm(null)} onDone={(msg) => { const t = LIVE_TARGET[liveForm]; setLiveForm(null); openSheet(t); notify(msg); }} />}
+      {liveForm && <LiveDocForm kind={liveForm} companyId={cid} context={formContext} prefill={prefill} onClose={() => { setLiveForm(null); setPrefill(undefined); }} onDone={(msg) => { const t = LIVE_TARGET[liveForm]; setLiveForm(null); setPrefill(undefined); openSheet(t); notify(msg); }} />}
       {moduleForm && <ModuleForm spec={MODULE_FORMS[moduleForm]} companyId={cid} onClose={() => setModuleForm(null)} onDone={(msg, target) => { setModuleForm(null); if (target) openSheet(target); notify(msg); }} />}
       {printing && <PrintDoc kind={printing.kind} id={printing.id} companyId={cid} onClose={() => setPrinting(null)} />}
       {backstage && <Backstage live={live ? { company: companyName, role: grant?.role ?? '', user: sess.me!.email } : undefined} onClose={() => setBackstage(false)} onExport={toCsv} />}

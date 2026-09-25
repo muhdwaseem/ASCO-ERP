@@ -19,4 +19,8 @@
     <InternalsVisibleTo Include="Asco.Api.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Anthropic" Version="12.50.0" />
+  </ItemGroup>
+
 </Project>

@@ -378,6 +378,16 @@ export const LIVE: Record<string, LiveSpec> = {
     columns: [t('plateNo', 'Vehicle', 120), n('distanceKm', 'Km', 90), n('fuelLitres', 'Fuel L', 90), n('kmPerLitre', 'Km / L', 80), m('runningCost', 'Running Cost', 120), m('costPerKm', 'Cost / km', 100)],
     rows: withTotal('plateNo', ['distanceKm', 'fuelLitres', 'runningCost']),
   },
+  insights: {
+    path: '/ai/insights',
+    columns: [t('severity', 'Severity', 80), t('area', 'Area', 120), t('finding', 'Finding', 520), t('action', 'Suggested Action', 260)],
+    rows: (xs: J[]) => xs.map((x) => ({ ...x, ...(x.severity === 'High' || x.severity === 'Medium' ? meta('warn') : {}) })),
+  },
+  'ai-guardrails': {
+    path: '/ai/log', admin: true,
+    columns: [t('when', 'When', 130), t('user', 'User', 160), t('question', 'Question', 420), t('toolsUsed', 'Tools Used', 240), n('tokens', 'Tokens', 80), t('ok', 'OK', 40)],
+    rows: (xs: J[]) => xs.map((x) => ({ ...x, when: dt(x.createdAtUtc), tokens: x.inputTokens + x.outputTokens, ok: x.succeeded ? '✓' : '✗' })),
+  },
   'leave-requests': {
     path: '/leave-requests', payroll: true,
     columns: [n('id', 'Req', 50), t('employee', 'Employee', 180), t('type', 'Type', 80), d('startDate', 'From'), d('endDate', 'To'), n('days', 'Days', 50), t('reason', 'Reason', 220), t('status', 'Status', 90), t('decisionBy', 'Decided By', 150)],

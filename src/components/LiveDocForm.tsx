@@ -19,12 +19,14 @@ export const LIVE_TARGET: Record<LiveFormKind, string> = {
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 interface Line { itemId: string; description: string; accountId: string; qty: string; price: string; vat: string }
+/** Pre-fill from a scanned bill (or any other source). */
+export interface LivePrefill { partyId?: number; date?: string; reference?: string; lines?: { description: string; qty: string; price: string; vat: string }[] }
 
 export function useLookups(companyId: number) {
   return useQuery({ queryKey: ['lookups', companyId], queryFn: () => api.get<Lookups>('/lookups', companyId), staleTime: 60_000 });
 }
 
-export function LiveDocForm({ kind, companyId, onClose, onDone, context }: { kind: LiveFormKind; companyId: number; onClose: () => void; onDone: (msg: string) => void; context?: { employeeId: number; name?: string } }) {
+export function LiveDocForm({ kind, companyId, onClose, onDone, context, prefill }: { kind: LiveFormKind; companyId: number; onClose: () => void; onDone: (msg: string) => void; context?: { employeeId: number; name?: string }; prefill?: LivePrefill }) {
   const qc = useQueryClient();
   const lk = useLookups(companyId);
   const L = lk.data;
@@ -34,16 +36,18 @@ export function LiveDocForm({ kind, companyId, onClose, onDone, context }: { kin
   const portal = kind === 'portal-access';
   const [login, setLogin] = useState({ email: '', password: '' });
 
-  const [party, setParty] = useState('');
-  const [date, setDate] = useState(today());
+  const [party, setParty] = useState(prefill?.partyId ? String(prefill.partyId) : '');
+  const [date, setDate] = useState(prefill?.date ?? today());
   const [bank, setBank] = useState('');
   const [narration, setNarration] = useState('');
-  const [reference, setReference] = useState('');
+  const [reference, setReference] = useState(prefill?.reference ?? '');
   const [payLater, setPayLater] = useState(false);
   const [against, setAgainst] = useState('');
   const [amount, setAmount] = useState('');
   const [mode, setMode] = useState('BankTransfer');
-  const [lines, setLines] = useState<Line[]>([{ itemId: '', description: '', accountId: '', qty: '1', price: '', vat: '0.05' }]);
+  const [lines, setLines] = useState<Line[]>(prefill?.lines?.length
+    ? prefill.lines.map((l) => ({ itemId: '', accountId: '', ...l }))
+    : [{ itemId: '', description: '', accountId: '', qty: '1', price: '', vat: '0.05' }]);
   const [m, setM] = useState({ name: '', group: '', trn: '', email: '', phone: '', address: '', creditLimit: '0', terms: '30', currency: 'AED' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -59,7 +63,7 @@ export function LiveDocForm({ kind, companyId, onClose, onDone, context }: { kin
     if (!L) return;
     if (!bank && L.bankAccounts[0]) setBank(String(L.bankAccounts[0].id));
     const open = L.openPeriods.find((p) => today() >= p.startDate && today() <= p.endDate) ?? L.openPeriods[L.openPeriods.length - 1];
-    if (open && !(today() >= open.startDate && today() <= open.endDate)) setDate(open.endDate < today() ? open.endDate : open.startDate);
+    if (!prefill?.date && open && !(today() >= open.startDate && today() <= open.endDate)) setDate(open.endDate < today() ? open.endDate : open.startDate);
   }, [L]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const parties = (sales ? L?.customers : L?.vendors) ?? [];

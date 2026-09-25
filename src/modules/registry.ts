@@ -30,7 +30,7 @@ export interface Screen {
   group: string;
   icon: LucideIcon;
   color: string;
-  kind?: 'sheet' | 'journal-entry' | 'ai';
+  kind?: 'sheet' | 'journal-entry' | 'ai' | 'scan';
   columns?: Col[];
   rows?: (s: LedgerState) => Row[];
   newForm?: FormKind;
@@ -570,7 +570,7 @@ export const SCREENS: Screen[] = [
     note: 'Rule-based today; the same sheet becomes the AI anomaly feed in Phase 4.',
   },
   {
-    id: 'bill-scan', label: 'Scan Bill', tab: 'AI', group: 'Automation', icon: ScanLine, color: C.teal, planned: true,
+    id: 'bill-scan', label: 'Scan Bill', tab: 'AI', group: 'Automation', icon: ScanLine, color: C.teal, kind: 'scan',
     columns: [t('step', 'Pipeline step', 240), t('detail', 'Detail', 460)],
     rows: () => [
       { step: '1. Upload PDF / photo', detail: 'Drag a vendor bill onto the sheet' },
@@ -578,10 +578,10 @@ export const SCREENS: Screen[] = [
       { step: '3. Match', detail: 'Vendor + expense account suggestion from history' },
       { step: '4. Review & post', detail: 'Pre-filled Purchase Invoice → human approves → posted via engine' },
     ],
-    note: 'Phase 4 — port of C-ERP BillScanningService.',
+    note: 'Live mode: upload a bill; C-ERP\'s BillScanningService extracts it into a purchase-invoice draft.',
   },
   {
-    id: 'ai-guardrails', label: 'AI Audit Trail', tab: 'AI', group: 'Automation', icon: ShieldCheck, color: C.gray, planned: true,
+    id: 'ai-guardrails', label: 'AI Audit Trail', tab: 'AI', group: 'Automation', icon: ShieldCheck, color: C.gray,
     columns: [t('rule', 'Guardrail', 300), t('why', 'Why', 400)],
     rows: () => [
       { rule: 'AI never posts directly', why: 'It drafts; a user with CanPost approves → same posting engine' },

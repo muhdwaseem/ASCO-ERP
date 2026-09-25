@@ -49,6 +49,40 @@ Python is a good fit for accounting software — the two biggest open-source ERP
 
 **Middle path:** keep the .NET accounting core and add a **Python AI service** (FastAPI + `anthropic`) that the .NET API calls for Ask AI / bill scanning / insights. You get Python where it's strongest without rewriting the ledger.
 
+### How the established products are built
+
+| Product | Deployment | Back end | Database | Customisation | Users / scale model |
+|---|---|---|---|---|---|
+| **TallyPrime** | Windows desktop (+ remote access) | Native C/C++ engine | Tally's own proprietary data files | TDL (Tally Definition Language) | Gold licence = unlimited users **on the LAN**, limited remote users |
+| **Zoho Books** | Cloud SaaS only | Java on Linux, Zoho-owned data centres | PostgreSQL among others (Zoho-run) | Deluge scripting, custom fields, APIs | Multi-tenant cloud; users priced per plan |
+| **Odoo** | Cloud (Odoo.sh / Online) or self-hosted | Python, Odoo's own ORM & framework | PostgreSQL | Python modules + XML views, OWL (JS) front end | Stateless workers behind a load balancer; thousands of users per DB |
+| **MS Dynamics 365 Business Central** | Cloud (Azure) or on-prem | .NET server tier, AL language | SQL Server / Azure SQL | AL extensions (AppSource) | Azure-scaled multi-tenant service |
+| **ASCO (planned)** | Cloud SaaS (+ optional desktop via Tauri) | .NET 8 (C-ERP core) | PostgreSQL | Custom fields & tags → plug-in modules later | Stateless API + React, horizontally scaled |
+
+**Which to follow:** architecture like **Zoho / Dynamics** (cloud, multi-tenant, stateless API),
+tech like **Dynamics** (.NET + SQL database — i.e. the C-ERP core you already have), modular
+"apps" idea from **Odoo**, keyboard-speed data entry from **Tally**. Language is not what makes
+these products scale — Odoo (Python), Zoho (Java) and Dynamics (.NET) all serve huge user counts.
+The architecture does.
+
+## 2b. "Unlimited users" — how ASCO scales
+
+No system is literally unlimited; the goal is **adding users only requires adding servers, never
+rewriting code**. Rules:
+
+1. **Stateless API servers** behind a load balancer — any request can hit any server; add more as load grows.
+   *This is why ASCO moves off Blazor Server:* Blazor Server keeps a live connection + memory per
+   user on one server (C-ERP today runs on a 512 MB / 0.5 CPU Render instance), which caps concurrent users.
+2. **PostgreSQL + connection pooler (PgBouncer / Supabase pooler)** so thousands of users share a few hundred DB connections.
+3. **Read replicas** for reports/dashboards so heavy reports never slow down invoice posting.
+4. **Multi-tenant isolation** by `CompanyId` (already in C-ERP) + Postgres row-level security; very large tenants can later move to their own database/shard.
+5. **Background jobs** (recurring invoices, depreciation, email, AI) on a queue, not in web requests.
+6. **Redis cache** for sessions, permissions and hot lookups (chart of accounts, tax codes).
+7. **Correct concurrency** — already built in C-ERP: advisory locks for document numbers, row locks for payment allocation.
+8. **Load test before launch** (k6 / JMeter) at e.g. 1,000 concurrent users; C-ERP's own README lists this as not yet done.
+
+Licensing "unlimited users" (like Tally Gold) is a pricing decision, separate from the above.
+
 ## 3. Module parity (C-ERP NavMenu → ribbon)
 
 | Ribbon tab | Sheets | Prototype status |

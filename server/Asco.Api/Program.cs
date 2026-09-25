@@ -110,6 +110,7 @@ app.UseAuthorization();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })); // load-balancer probe
 app.MapAuthEndpoints();
 app.MapReadEndpoints();
+app.MapWriteEndpoints();
 
 app.Run();
 

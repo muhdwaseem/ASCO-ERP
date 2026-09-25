@@ -2,7 +2,11 @@ import type { LucideIcon } from 'lucide-react';
 import { ChevronUp } from 'lucide-react';
 import { SCREENS } from '../modules/registry';
 
-export interface Action { label: string; icon: LucideIcon; color: string; run: () => void; small?: boolean; disabled?: boolean; title?: string }
+export interface Action {
+  label: string; icon: LucideIcon; color: string; run: () => void; small?: boolean; disabled?: boolean; title?: string;
+  /** What the action requires in live mode; 'live' = only meaningful against the API. */
+  needs?: 'post' | 'payroll' | 'admin' | 'live';
+}
 export interface ActionGroup { group: string; actions: Action[]; position?: 'start' | 'end' }
 
 interface Props {

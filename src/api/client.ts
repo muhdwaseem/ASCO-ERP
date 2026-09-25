@@ -41,7 +41,36 @@ export const api = {
   logout: () => call<void>('/api/auth/logout', { method: 'POST' }),
   me: () => call<Me>('/api/auth/me'),
   get: <T>(path: string, companyId: number) => call<T>(`/api${path}`, {}, companyId),
+  post: <T>(path: string, body: unknown, companyId: number) => call<T>(`/api${path}`, { method: 'POST', body: JSON.stringify(body ?? {}) }, companyId),
+  /** Downloads a file endpoint (e.g. the WPS SIF) with the company header attached. */
+  async download(path: string, companyId: number) {
+    const res = await fetch(`/api${path}`, { headers: { 'X-ASCO': '1', 'X-Company-Id': String(companyId) }, credentials: 'same-origin' });
+    if (!res.ok) {
+      const body = safeJson(await res.text()) as { detail?: string } | undefined;
+      throw new ApiError(res.status, body?.detail ?? `Download failed (${res.status})`);
+    }
+    const name = /filename="?([^";]+)"?/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'download.txt';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await res.blob());
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    return name;
+  },
 };
+
+export interface Lookups {
+  accounts: { id: number; code: string; name: string; type: string; category?: string }[];
+  bankAccounts: { id: number; code: string; name: string; balance: number }[];
+  costCenters: { id: number; code: string; name: string }[];
+  customers: { id: number; code: string; name: string; paymentTermsDays: number }[];
+  vendors: { id: number; code: string; name: string }[];
+  items: { id: number; code: string; name: string; kind: string; unit: string; sellingPrice: number; costPrice?: number; salesAccountId?: number; purchaseAccountId?: number; vatRate?: number | null }[];
+  taxCodes: { id: number; code: string; description: string; rate: number }[];
+  openPeriods: { id: number; name: string; startDate: string; endDate: string }[];
+}
+/** C-ERP stores VAT as a fraction (0.05) on documents; tax codes may hold 5. Normalise to a fraction. */
+export const vatFraction = (r?: number | null) => (r == null ? 0.05 : r > 1 ? r / 100 : r);
 
 // ---------------------------------------------------------------- session store
 

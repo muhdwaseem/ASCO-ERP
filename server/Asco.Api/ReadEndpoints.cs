@@ -71,6 +71,8 @@ internal static class ReadEndpoints
         });
 
         api.MapGet("/customers/{id:int}/statement", (int id, CustomerService customers) => customers.GetStatementAsync(id));
+        api.MapGet("/customers/{id:int}/open-invoices", (int id, CustomerService customers) => customers.GetOpenInvoicesAsync(id));
+        api.MapGet("/vendors/{id:int}/open-invoices", (int id, VendorService vendors) => vendors.GetOpenInvoicesAsync(id));
 
         api.MapGet("/agents", async (IDbContextFactory<AegisDbContext> dbf) =>
         {
@@ -308,6 +310,65 @@ internal static class ReadEndpoints
             var kits = await db.ServiceKits.AsNoTracking().Include(k => k.Lines).OrderBy(k => k.Name).ToListAsync();
             return kits.Select(k => new { k.Id, k.Name, k.IsActive, Lines = k.Lines.OrderBy(l => l.SortOrder).Select(l => new { l.Description, l.GovtFee, l.CenterFee, l.BankCharge, l.VatRate }) });
         });
+
+        // ── Print data (Phase 3): letterhead + documents ─────────────────────
+        api.MapGet("/company-profile", async (HttpContext ctx, IDbContextFactory<AegisDbContext> dbf) =>
+        {
+            var id = CompanyAccess.From(ctx).Row.CompanyId;
+            await using var db = await dbf.CreateDbContextAsync();
+            var c = await db.CompanySetups.AsNoTracking().Include(x => x.BankAccounts).FirstOrDefaultAsync(x => x.Id == id);
+            if (c is null) return Results.NotFound();
+            var bank = c.BankAccounts.OrderByDescending(b => b.IsPrimary).FirstOrDefault();
+            return Results.Ok(new
+            {
+                c.LegalName, c.TradeName, c.CompanyCode, c.TrnNumber, c.City, c.AddressEmirate, c.POBox, c.AddressCountry, c.Phone,
+                c.BaseCurrency, c.VatRegistered, c.InvoiceDefaultTermsAndConditions, c.ProServiceModeEnabled, c.ApprovalWorkflowEnabled,
+                c.FinancialYearStart, c.FinancialYearEnd, c.LicenseNumber, c.LicenseExpiryDate,
+                Bank = bank == null ? null : new { bank.BankName, bank.AccountName, bank.AccountNumber, bank.Iban, bank.Swift, bank.Currency },
+            });
+        });
+
+        api.MapGet("/sales-invoices/{id:int}", async (int id, IDbContextFactory<AegisDbContext> dbf, SalesInvoiceService svc) =>
+        {
+            await using var db = await dbf.CreateDbContextAsync();
+            var i = await db.SalesInvoices.AsNoTracking().Include(x => x.Customer).Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == id);
+            if (i is null) return Results.NotFound();
+            var balance = (await svc.GetAllAsync()).FirstOrDefault(r => r.Invoice.Id == id)?.Balance;
+            return Results.Ok(new
+            {
+                i.Id, i.InvoiceNo, i.Date, i.DueDate, i.Status, i.ApprovalStatus, i.Narration, i.CustomerPoNo, i.Subject, i.Notes, i.TermsAndConditions, i.Salesperson,
+                Customer = new { i.Customer.Code, i.Customer.Name, i.Customer.Trn, i.Customer.Email, i.Customer.Address, i.Customer.Mobile },
+                Lines = i.Lines.OrderBy(l => l.LineNo).Select(l => new { l.LineNo, l.Description, l.Uom, l.Quantity, l.UnitPrice, l.VatRate, l.Net, l.Vat, l.Gross }),
+                Net = i.TotalNet, Vat = i.TotalVat, Gross = i.TotalGross, Balance = balance,
+            });
+        });
+
+        api.MapGet("/receipts/{id:int}", async (int id, IDbContextFactory<AegisDbContext> dbf) =>
+        {
+            await using var db = await dbf.CreateDbContextAsync();
+            var r = await db.CustomerReceipts.AsNoTracking().Include(x => x.Customer).Include(x => x.BankAccount).Include(x => x.SalesInvoice).FirstOrDefaultAsync(x => x.Id == id);
+            return r is null ? Results.NotFound() : Results.Ok(new
+            {
+                r.Id, r.ReceiptNo, r.Date, r.Amount, r.PaymentMode, r.ReferenceNo, r.ChequeDate, r.Narration, r.Status,
+                Customer = new { r.Customer.Code, r.Customer.Name, r.Customer.Trn }, BankAccount = r.BankAccount.Name,
+                InvoiceNo = r.SalesInvoice == null ? null : r.SalesInvoice.InvoiceNo,
+            });
+        });
+
+        api.MapGet("/payroll-runs/{id:int}", async (int id, IDbContextFactory<AegisDbContext> dbf) =>
+        {
+            await using var db = await dbf.CreateDbContextAsync();
+            var r = await db.PayrollRuns.AsNoTracking().Include(x => x.FiscalPeriod).Include(x => x.Lines).ThenInclude(l => l.Employee).FirstOrDefaultAsync(x => x.Id == id);
+            return r is null ? Results.NotFound() : Results.Ok(new
+            {
+                r.Id, Period = r.FiscalPeriod.Name, r.RunDate, r.Status, r.IsPaid, r.PaidDate, r.TotalGross, r.TotalDeductions, r.TotalNet,
+                Lines = r.Lines.OrderBy(l => l.Employee.EmployeeCode).Select(l => new
+                {
+                    l.Employee.EmployeeCode, l.Employee.FullName, l.Employee.Designation, l.Employee.Iban,
+                    l.BasicSalary, l.HousingAllowance, l.TransportAllowance, l.OtherAllowance, l.Deductions, l.SalaryAdvanceDeduction, l.GrossPay, l.NetPay,
+                }),
+            });
+        }).RequirePayroll();
 
         api.MapGet("/team", (HttpContext ctx, CompanyAccessService access) =>
             access.GetMembersAsync(CompanyAccess.From(ctx).Row.CompanyId)).RequireAdminister();

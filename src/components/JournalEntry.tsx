@@ -5,6 +5,11 @@ import type { Col, Row } from '../modules/registry';
 import type { LedgerState } from '../engine/types';
 import { postJournal, r2, PostingError } from '../engine/ledger';
 import { store } from '../engine/store';
+import { api } from '../api/client';
+
+/** Resolves a typed account code to its name/postability — demo ledger or live chart of accounts. */
+export type AccountResolver = (code: string) => { id?: number; name: string; isPostable: boolean } | undefined;
+export const demoResolver = (s: LedgerState): AccountResolver => (code) => s.accounts.find((a) => a.code === code);
 
 interface DraftLine { account: string; narration: string; party: string; debit: string; credit: string }
 interface Draft { date: string; narration: string; lines: DraftLine[] }
@@ -35,9 +40,9 @@ const KEYS: (keyof DraftLine | null)[] = ['account', null, 'narration', 'party',
 
 const num = (v: string) => (v.trim() === '' ? 0 : Number(v.replace(/,/g, '')) || 0);
 
-export function jeRows(s: LedgerState, d: Draft): Row[] {
+export function jeRows(resolve: AccountResolver, d: Draft): Row[] {
   const lines: Row[] = d.lines.map((l) => {
-    const known = s.accounts.find((a) => a.code === l.account.trim());
+    const known = resolve(l.account.trim());
     return {
       account: l.account, name: l.account ? (known ? (known.isPostable ? known.name : `⚠ ${known.name} is a header`) : '⚠ unknown account') : '',
       narration: l.narration, party: l.party,
@@ -77,15 +82,35 @@ export function postDraft(user: string): { ok: boolean; msg: string } {
   }
 }
 
-export function JeHeader({ onPost }: { onPost: () => void }) {
+/** Live mode: post (or save as draft) through the ASCO API → C-ERP JournalService. */
+export async function postDraftLive(resolve: AccountResolver, companyId: number, asDraft: boolean): Promise<{ ok: boolean; msg: string }> {
+  const d = draft;
+  const used = d.lines.filter((l) => l.account.trim());
+  const unknown = used.find((l) => !resolve(l.account.trim())?.id);
+  if (!used.length) return { ok: false, msg: 'Enter at least two lines.' };
+  if (unknown) return { ok: false, msg: `Unknown or header account "${unknown.account}".` };
+  try {
+    const res = await api.post<{ number: string; status: string }>('/vouchers', {
+      date: d.date, narration: d.narration || 'Manual journal', reference: null, draft: asDraft,
+      lines: used.map((l) => ({ accountId: resolve(l.account.trim())!.id, costCenterId: null, description: l.narration || null, debit: num(l.debit), credit: num(l.credit) })),
+    }, companyId);
+    set(fresh());
+    return { ok: true, msg: `${asDraft ? 'Saved draft' : 'Posted'} ${res.number}` };
+  } catch (e) {
+    return { ok: false, msg: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export function JeHeader({ onPost, onDraft, hint }: { onPost: () => void; onDraft?: () => void; hint?: string }) {
   const d = useJeDraft();
   const s = store.get();
   return (
     <div className="je-header">
       <label>Voucher date <input type="date" value={d.date} onChange={(e) => set({ ...d, date: e.target.value })} /></label>
       <label className="grow">Narration <input value={d.narration} placeholder="e.g. Accrue September audit fees" onChange={(e) => set({ ...d, narration: e.target.value })} /></label>
-      <span className="je-hint">Postable accounts: {s.accounts.filter((a) => a.isPostable).slice(0, 4).map((a) => a.code).join(', ')}… · see Chart of Accounts</span>
+      <span className="je-hint">{hint ?? `Postable accounts: ${s.accounts.filter((a) => a.isPostable).slice(0, 4).map((a) => a.code).join(', ')}… · see Chart of Accounts`}</span>
       <button className="btn ghost" onClick={() => set(fresh())}>Clear</button>
+      {onDraft && <button className="btn ghost" onClick={onDraft}>Save draft</button>}
       <button className="btn primary" onClick={onPost}>Post voucher</button>
     </div>
   );

@@ -1,0 +1,39 @@
+/* print preview for invoices / receipts / payslips */
+.print-shell { position: fixed; inset: 0; z-index: 60; background: #3a3a3a; overflow: auto; display: flex; flex-direction: column; align-items: center; padding-bottom: 40px; }
+.print-bar { position: sticky; top: 0; width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: #1f1f1f; color: #e8e8e8; z-index: 1; }
+.print-bar span { flex: 1; }
+.print-page { width: min(794px, calc(100vw - 32px)); min-height: 1000px; margin-top: 20px; background: #fff; color: #1b1b1b; padding: 48px 56px; font-family: 'Segoe UI', sans-serif; font-size: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.4); }
+.pd-head { display: flex; justify-content: space-between; gap: 24px; border-bottom: 3px solid var(--accent-2); padding-bottom: 14px; }
+.pd-head h1 { margin: 0 0 6px; font-size: 22px; }
+.pd-head p { margin: 2px 0; color: #555; }
+.pd-title { font-size: 22px; font-weight: 700; color: var(--accent-2); letter-spacing: .06em; white-space: nowrap; }
+.pd-meta { display: flex; justify-content: space-between; gap: 24px; margin: 22px 0; }
+.pd-meta p { margin: 2px 0; }
+.pd-meta dl { display: grid; grid-template-columns: auto auto; gap: 4px 16px; margin: 0; }
+.pd-meta dt { color: #666; }
+.pd-meta dd { margin: 0; font-weight: 600; }
+.pd-lines { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.pd-lines th { text-align: left; background: #eef6f1; border-bottom: 1px solid #9cc9ad; padding: 6px; font-size: 12px; }
+.pd-lines td { padding: 6px; border-bottom: 1px solid #e6e6e6; }
+.pd-lines .n { text-align: right; font-variant-numeric: tabular-nums; }
+.pd-lines tr.tot td { font-weight: 700; border-top: 1px solid #333; }
+.pd-totals { margin: 14px 0 0 auto; width: 300px; display: flex; flex-direction: column; gap: 4px; }
+.pd-totals div { display: flex; justify-content: space-between; }
+.pd-totals .grand { border-top: 1px solid #333; border-bottom: 3px double #333; padding: 4px 0; font-size: 15px; }
+.pd-note { margin-top: 22px; }
+.pd-note p { margin: 4px 0; color: #444; white-space: pre-wrap; }
+.pd-sign { display: flex; justify-content: space-between; margin-top: 90px; }
+.pd-sign span { border-top: 1px solid #333; padding-top: 6px; width: 40%; text-align: center; }
+.pd-slip { border: 1px solid #ddd; padding: 14px; margin-top: 18px; break-inside: avoid; }
+.pd-slip h2 { font-size: 15px; margin: 0 0 8px; }
+.pd-slip small { color: #666; font-weight: 400; }
+.pd-small { font-size: 11px; color: #666; margin: 6px 0 0; }
+.modal label.check { flex-direction: row; align-items: center; gap: 6px; min-width: 0; flex: 0; white-space: nowrap; }
+.modal label.check input { height: auto; }
+
+@media print {
+  body.printing-doc #root { display: none !important; }
+  body.printing-doc .print-shell { position: static; background: #fff; padding: 0; overflow: visible; }
+  body.printing-doc .print-bar { display: none; }
+  body.printing-doc .print-page { box-shadow: none; margin: 0; width: auto; min-height: 0; padding: 0; }
+}

@@ -2,17 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Save, Undo2, Redo2, ChevronDown, Lightbulb, Share2, X, Check, Plus, ChevronLeft, ChevronRight, Grid3x3, Columns3, PanelBottom, Minus,
   Copy, ArrowDownAZ, ArrowUpAZ, Funnel, Sigma, Download, Printer, FileText, HandCoins, FilePlus, Banknote, Receipt, NotebookPen,
-  Car, Wallet, BadgeCheck, CalendarDays, ChevronUp, RefreshCw, LogOut,
+  Car, Wallet, BadgeCheck, CalendarDays, ChevronUp, RefreshCw, LogOut, UserPlus, Building2, Mail, FileDown,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, sessionActions, useSession } from './api/client';
+import { api, sessionActions, useSession, type Lookups } from './api/client';
 import { LIVE } from './modules/live';
 import { store, useLedger } from './engine/store';
 import { markPayrollPaid, PostingError, postPayroll, runDepreciation } from './engine/ledger';
 import { SCREENS, TABS, screenById, type FormKind, type Row, type RowMeta, type Col } from './modules/registry';
 import { Grid, colName, fmt, cellValue, type Sel } from './components/Grid';
 import { Ribbon, type ActionGroup } from './components/Ribbon';
-import { JE_COLUMNS, jeEditable, jeEdit, jeRows, JeHeader, postDraft, useJeDraft } from './components/JournalEntry';
+import { JE_COLUMNS, jeEditable, jeEdit, jeRows, JeHeader, postDraft, postDraftLive, demoResolver, useJeDraft, type AccountResolver } from './components/JournalEntry';
+import { LiveDocForm, LIVE_TARGET, type LiveFormKind } from './components/LiveDocForm';
+import { PrintDoc, type PrintKind } from './components/PrintDoc';
 import { DocForm } from './components/DocForm';
 import { AiPanel } from './components/AiPanel';
 import { Backstage } from './components/Backstage';
@@ -33,6 +35,8 @@ export default function App() {
   const [filter, setFilter] = useState<{ on: boolean; text: string }>({ on: false, text: '' });
   const [zoom, setZoom] = useState(100);
   const [form, setForm] = useState<FormKind | null>(null);
+  const [liveForm, setLiveForm] = useState<LiveFormKind | null>(null);
+  const [printing, setPrinting] = useState<{ kind: PrintKind; id: number } | null>(null);
   const [backstage, setBackstage] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [status, setStatus] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
@@ -53,6 +57,12 @@ export default function App() {
     queryFn: () => api.get<unknown>(spec!.path, sess.companyId!),
     enabled: !!spec && !blocked,
   });
+  const lookups = useQuery({ queryKey: ['lookups', sess.companyId], queryFn: () => api.get<Lookups>('/lookups', sess.companyId!), enabled: live, staleTime: 60_000 });
+  const resolver: AccountResolver = useMemo(() => {
+    if (!live) return demoResolver(s);
+    const byCode = new Map((lookups.data?.accounts ?? []).map((a) => [a.code, a]));
+    return (code: string) => { const a = byCode.get(code); return a ? { id: a.id, name: a.name, isPostable: true } : undefined; };
+  }, [live, s, lookups.data]);
   const sel = sels[active] ?? ORIGIN;
   const setSel = (x: Sel) => setSels((p) => ({ ...p, [active]: x }));
 
@@ -78,7 +88,7 @@ export default function App() {
 
   // ---------- view model for the active sheet
   const view = useMemo(() => {
-    if (!live && screen.kind === 'journal-entry') return { columns: JE_COLUMNS, rows: jeRows(s, draft), editable: jeEditable, onEdit: jeEdit };
+    if (screen.kind === 'journal-entry') return { columns: JE_COLUMNS, rows: jeRows(resolver, draft), editable: jeEditable, onEdit: jeEdit };
     if (!live && screen.kind === 'ai') return { columns: [] as Col[], rows: [] as Row[] };
     const notice = (msg: string, style: RowMeta['style'] = 'muted') => ({ columns: [{ key: 'msg', label: screen.label, width: 620 }] as Col[], rows: [{ msg, _meta: { style } }] as Row[] });
     const base = (() => {
@@ -113,7 +123,7 @@ export default function App() {
       rows = [...body, ...tail];
     }
     return { columns, rows };
-  }, [screen, s, draft, filter, sorts, active, live, spec, blocked, liveQuery.data, liveQuery.status, liveQuery.error, sess.me]);
+  }, [screen, s, draft, filter, sorts, active, live, spec, blocked, liveQuery.data, liveQuery.status, liveQuery.error, sess.me, resolver]);
 
   // ---------- selection stats (Excel status bar)
   const stats = useMemo(() => {
@@ -171,13 +181,25 @@ export default function App() {
   const run = (label: string, fn: () => string) => {
     try { notify(store.mutate(() => fn()) || label); } catch (e) { notify(e instanceof PostingError ? e.message : String(e), 'err'); }
   };
-  const postJv = () => {
+  const postJv = (asDraft = false) => {
     if (active !== 'journal-voucher') { openSheet('journal-voucher'); return; }
-    const r = postDraft(USER);
-    notify(r.msg, r.ok ? 'ok' : 'err');
+    if (!live) { const r = postDraft(USER); notify(r.msg, r.ok ? 'ok' : 'err'); return; }
+    postDraftLive(resolver, sess.companyId!, asDraft).then((r) => { notify(r.msg, r.ok ? 'ok' : 'err'); if (r.ok) qc.invalidateQueries(); });
+  };
+  /** Live command: runs against the API, reports the outcome in the status bar, refreshes every sheet. */
+  const liveRun = async (fn: () => Promise<string>) => {
+    try { notify(await fn()); await qc.invalidateQueries(); } catch (e) { notify(e instanceof Error ? e.message : String(e), 'err'); }
+  };
+  const cid = sess.companyId ?? 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const activeId = typeof activeRow?.id === 'number' ? (activeRow.id as number) : undefined;
+  const printSelected = (kind: PrintKind, sheet: string, what: string) => {
+    if (active !== sheet) { openSheet(sheet); notify(`Select a ${what} row, then click Print again`); return; }
+    if (!activeId) { notify(`Select a ${what} row first`, 'err'); return; }
+    setPrinting({ kind, id: activeId });
   };
 
-  const newDoc = (k: FormKind) => ({ run: () => setForm(k) });
+  const newDoc = (k: FormKind) => ({ needs: 'post' as const, run: () => (live ? setLiveForm(k) : setForm(k)) });
   const extra: Record<string, ActionGroup[]> = {
     Home: [
       { group: 'Clipboard', position: 'start', actions: [
@@ -202,25 +224,61 @@ export default function App() {
         { label: 'AutoSum', icon: Sigma, color: C.gray, small: true, run: () => notify(stats.n ? `Sum of ${stats.n} cells = ${fmt({ key: '', label: '', type: 'money' }, stats.sum)}` : 'Select numeric cells first', stats.n ? 'ok' : 'err') },
       ] },
     ],
-    Finance: [{ group: 'Post', actions: [{ label: 'Post Voucher', icon: BadgeCheck, color: C.green, run: postJv, title: 'Post the journal voucher (Ctrl+Enter)' }] }],
-    Receivables: [{ group: 'New', actions: [{ label: 'New Invoice', icon: FileText, color: C.green, ...newDoc('sales-invoice') }, { label: 'New Receipt', icon: HandCoins, color: C.green, ...newDoc('receipt') }] }],
-    Payables: [{ group: 'New', actions: [{ label: 'New Bill', icon: FilePlus, color: C.orange, ...newDoc('purchase-invoice') }, { label: 'New Payment', icon: Banknote, color: C.orange, ...newDoc('payment') }, { label: 'New Expense', icon: Receipt, color: C.red, ...newDoc('expense') }] }],
-    'CRM & Assets': [{ group: 'Run', actions: [{ label: 'Run Depreciation', icon: Car, color: C.teal, run: () => run('', () => `Posted ${runDepreciation(store.get(), monthEnd(), USER)} for ${monthEnd().slice(0, 7)}`) }] }],
+    Finance: [{ group: 'Post', actions: [{ label: 'Post Voucher', icon: BadgeCheck, color: C.green, needs: 'post', run: () => postJv(), title: 'Post the journal voucher (Ctrl+Enter)' }] }],
+    Receivables: [
+      { group: 'New', actions: [{ label: 'New Invoice', icon: FileText, color: C.green, ...newDoc('sales-invoice') }, { label: 'New Receipt', icon: HandCoins, color: C.green, ...newDoc('receipt') }, { label: 'New Customer', icon: UserPlus, color: C.blue, needs: 'post', run: () => setLiveForm('customer') }] },
+      { group: 'Documents', actions: [
+        { label: 'Print Invoice', icon: Printer, color: C.gray, small: true, needs: 'live', run: () => printSelected('invoice', 'sales-invoices', 'sales invoice') },
+        { label: 'Print Receipt', icon: Printer, color: C.gray, small: true, needs: 'live', run: () => printSelected('receipt', 'receipts', 'receipt') },
+        { label: 'Send Reminder', icon: Mail, color: C.gray, small: true, needs: 'post', run: () => {
+          if (active !== 'sales-invoices' || !activeId) return notify('Select an invoice row on the Sales Invoice sheet first', 'err');
+          liveRun(async () => { await api.post(`/sales-invoices/${activeId}/remind`, {}, cid); return 'Reminder emailed to the customer (via C-ERP EmailService)'; });
+        } },
+      ] },
+    ],
+    Payables: [{ group: 'New', actions: [{ label: 'New Bill', icon: FilePlus, color: C.orange, ...newDoc('purchase-invoice') }, { label: 'New Payment', icon: Banknote, color: C.orange, ...newDoc('payment') }, { label: 'New Expense', icon: Receipt, color: C.red, ...newDoc('expense') }, { label: 'New Vendor', icon: Building2, color: C.blue, needs: 'post', run: () => setLiveForm('vendor') }] }],
+    'CRM & Assets': [{ group: 'Run', actions: [{ label: 'Run Depreciation', icon: Car, color: C.teal, needs: 'post', run: () => (live
+      ? liveRun(async () => { const r = await api.post<{ voucher?: string; message?: string }>('/fixed-assets/depreciation', {}, cid); return r.voucher ? `Posted depreciation ${r.voucher}` : r.message ?? 'Nothing to depreciate'; })
+      : run('', () => `Posted ${runDepreciation(store.get(), monthEnd(), USER)} for ${monthEnd().slice(0, 7)}`)) }] }],
     'HR & Payroll': [{ group: 'Run', actions: [
-      { label: 'Run Payroll', icon: Wallet, color: C.green, run: () => run('', () => {
+      { label: 'Run Payroll', icon: Wallet, color: C.green, needs: 'payroll', run: () => live ? liveRun(async () => {
+        const created = await api.post<{ id: number; employees: number }>('/payroll-runs', { runDate: today }, cid);
+        const posted = await api.post<{ voucher: string }>(`/payroll-runs/${created.id}/post`, { deductionsAccountId: null }, cid);
+        return `Payroll run #${created.id} posted (${created.employees} employees) — voucher ${posted.voucher}; mark paid after the WPS transfer`;
+      }) : run('', () => {
         const period = new Date().toLocaleString('en', { month: 'short', year: 'numeric' });
         if (store.get().payrollRuns.some((r) => r.period === period)) throw new PostingError(`Payroll for ${period} already posted.`);
         return `Posted payroll ${postPayroll(store.get(), period, monthEnd(), USER, false)} (${period}) — accrued, not yet paid`;
       }) },
-      { label: 'Mark Paid (WPS)', icon: BadgeCheck, color: C.blue, run: () => run('', () => {
+      { label: 'Mark Paid (WPS)', icon: BadgeCheck, color: C.blue, needs: 'payroll', run: () => live ? liveRun(async () => {
+        const runs = await api.get<{ id: number; status: string; isPaid: boolean }[]>('/payroll-runs', cid);
+        const unpaid = runs.filter((r) => r.status === 'Posted' && !r.isPaid);
+        const bank = lookups.data?.bankAccounts[0];
+        if (!unpaid.length) throw new Error('No posted, unpaid payroll runs.');
+        if (!bank) throw new Error('No bank account found to pay from.');
+        for (const r of unpaid) { await api.download(`/payroll-runs/${r.id}/wps`, cid); await api.post(`/payroll-runs/${r.id}/pay`, { bankAccountId: bank.id, paidDate: today }, cid); }
+        return `Downloaded WPS SIF and marked ${unpaid.length} run(s) paid from ${bank.name}`;
+      }) : run('', () => {
         const unpaid = store.get().payrollRuns.filter((r) => !r.isPaid);
         if (!unpaid.length) throw new PostingError('No unpaid payroll runs.');
         unpaid.forEach((r) => markPayrollPaid(store.get(), r.no, r.runDate, USER));
         return `Paid ${unpaid.length} payroll run(s) via WPS transfer`;
       }) },
+    ] }, { group: 'Documents', actions: [
+      { label: 'Payslips', icon: Printer, color: C.gray, small: true, needs: 'live', run: () => printSelected('payslips', 'payroll', 'payroll run') },
+      { label: 'WPS File', icon: FileDown, color: C.gray, small: true, needs: 'payroll', run: () => {
+        if (active !== 'payroll' || !activeId) return notify('Select a posted payroll run on the Payroll Runs sheet first', 'err');
+        liveRun(async () => `Downloaded ${await api.download(`/payroll-runs/${activeId}/wps`, cid)}`);
+      } },
     ] }],
     Reports: [{ group: 'Output', actions: [{ label: 'Export CSV', icon: Download, color: C.gray, run: toCsv }, { label: 'Print', icon: Printer, color: C.gray, run: () => window.print() }] }],
-    Settings: [{ group: 'Period End', actions: [{ label: 'Close Period', icon: CalendarDays, color: C.red, run: () => run('', () => {
+    Settings: [{ group: 'Period End', actions: [{ label: 'Close Period', icon: CalendarDays, color: C.red, needs: 'admin', run: () => live ? liveRun(async () => {
+      const periods = await api.get<{ id: number; name: string; endDate: string; isClosed: boolean }[]>('/fiscal-periods', cid);
+      const p = periods.find((x) => !x.isClosed && x.endDate < today);
+      if (!p) throw new Error('No completed period left to close.');
+      await api.post(`/fiscal-periods/${p.id}/close`, {}, cid);
+      return `Closed ${p.name} — C-ERP now rejects postings dated in it`;
+    }) : run('', () => {
       const p = store.get().periods.find((x) => !x.isClosed);
       if (!p || p.endDate >= new Date().toISOString().slice(0, 10)) throw new PostingError('No completed period left to close.');
       p.isClosed = true;
@@ -243,11 +301,22 @@ export default function App() {
     : [];
 
   const statusMsg = status?.msg ?? (live && liveQuery.isFetching ? 'Loading…' : editableActive ? 'Enter' : screen.note && active === 'journal-voucher' && !live ? screen.note : 'Ready');
-  // Phase 1 is read-only against the API: write actions stay available in demo mode only.
-  const WRITE = /^(New |Journal$|Post|Run |Mark|Close)/;
+  // Enable each action by what the signed-in user may do in THIS company (same rules as C-ERP).
+  const why = (n?: string) => {
+    if (!n) return null;
+    if (!live) return n === 'live' ? 'Sign in to a live company to use this' : null;
+    if (n === 'post' && !grant?.canPost) return 'Your role in this company is read-only';
+    if (n === 'payroll' && !(grant?.canPost && grant?.canAccessPayroll)) return 'Needs the payroll grant in this company';
+    if (n === 'admin' && !grant?.canAdminister) return 'Needs company administrator access';
+    return null;
+  };
+  const liveOnly = (label: string) => !live && /^(New Customer|New Vendor|Send Reminder|WPS File)$/.test(label);
   const ribbonExtra = (extra[tab] ?? []).map((g) => ({
     ...g,
-    actions: g.actions.map((a) => (live && WRITE.test(a.label) ? { ...a, disabled: true, title: `${a.label} — arrives in Phase 2 (posting through the API)` } : a)),
+    actions: g.actions.map((a) => {
+      const reason = liveOnly(a.label) ? 'Sign in to a live company to use this' : why(a.needs);
+      return reason ? { ...a, disabled: true, title: `${a.label} — ${reason}` } : a;
+    }),
   }));
   const companyName = live ? grant?.name ?? '' : s.company.name;
   const userName = live ? sess.me!.displayName : 'Demo user';
@@ -327,7 +396,7 @@ export default function App() {
       </div>
 
       <main className="sheet">
-        {!live && screen.kind === 'journal-entry' && <JeHeader onPost={postJv} />}
+        {screen.kind === 'journal-entry' && <JeHeader onPost={() => postJv()} onDraft={live ? () => postJv(true) : undefined} hint={live ? 'Type account codes from the Chart of Accounts sheet · Post, or save a draft for approval' : undefined} />}
         {!live && screen.kind === 'ai' ? (
           <AiPanel />
         ) : (
@@ -366,6 +435,8 @@ export default function App() {
         const target: Record<FormKind, string> = { 'sales-invoice': 'sales-invoices', 'purchase-invoice': 'purchase-invoices', receipt: 'receipts', payment: 'payments', expense: 'expenses' };
         setForm(null); openSheet(target[form]); notify(msg);
       }} />}
+      {liveForm && <LiveDocForm kind={liveForm} companyId={cid} onClose={() => setLiveForm(null)} onDone={(msg) => { const t = LIVE_TARGET[liveForm]; setLiveForm(null); openSheet(t); notify(msg); }} />}
+      {printing && <PrintDoc kind={printing.kind} id={printing.id} companyId={cid} onClose={() => setPrinting(null)} />}
       {backstage && <Backstage live={live ? { company: companyName, role: grant?.role ?? '', user: sess.me!.email } : undefined} onClose={() => setBackstage(false)} onExport={toCsv} />}
     </div>
   );

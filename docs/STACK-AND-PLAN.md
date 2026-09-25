@@ -83,32 +83,75 @@ rewriting code**. Rules:
 
 Licensing "unlimited users" (like Tally Gold) is a pricing decision, separate from the above.
 
-## 3. Module parity (C-ERP NavMenu → ribbon)
+## 3. Module parity (C-ERP NavMenu → ribbon) — status 2026-09-25
 
-| Ribbon tab | Sheets | Prototype status |
+| Ribbon tab | Sheets | Status (live mode, through the API) |
 |---|---|---|
-| Home | Dashboard, Quick Entry (invoice/receipt/bill/payment/expense), Sort/Filter/AutoSum, CSV, Print | working |
-| Finance | Chart of Accounts, Opening Balances, General Ledger, Journal Voucher (cell entry + Post), Voucher Register | working |
-| Receivables | Customers, Agents, Estimate/Quotation, Delivery Note, Sales Invoice, Recurring Invoices, Receipt Voucher, Credit Note, AR Aging, Outstanding Report, Transactions | working (new invoice/receipt via dialog) |
-| Payables | Vendors, Purchase Invoice, Expenses, Payment Voucher, Debit Note, AP Aging, Expense Transactions | working (new bill/payment/expense via dialog) |
-| Items | Items, Item Kits, Units, Item Categories, Stock & Warehouses | working; stock = planned (also missing in C-ERP) |
-| CRM & Assets | Leads, Fixed Assets (+ Run Depreciation) | working |
-| HR & Payroll | Employees (UAE EOSB gratuity, visa expiry), Payroll Runs (+ Run / Mark Paid WPS), WPS/Payslips, Employee Portal | working; ESS portal = Phase 3 |
-| Reports | Trial Balance, P&L, Balance Sheet, Cash Flow, MIS & Segments, Commission Report, Audit Log | working |
-| Settings | Company Setup, Companies & Access, Manage Team, Fiscal Periods (+ Close Period), Cost Centers, Currencies, Tax Configuration, Commission Config, Service Kits, Custom Fields & Tags | read views working; edit dialogs = Phase 2 |
-| AI | Ask AI (offline deterministic answers), Insights (rule-based anomalies), Scan Bill, AI Audit Trail | UX in place; Claude wiring = Phase 4 |
+| Home | Dashboard, Quick Entry, Sort/Filter/AutoSum, CSV, Print, Refresh | done |
+| Finance | Chart of Accounts, Opening Balances, General Ledger, Journal Voucher (cell entry → post or draft → submit/approve/post), Voucher Register | done |
+| Receivables | Customers (+ new), Agents, Estimates (+ convert), Delivery Notes, Sales Invoices (+ print, reminder e-mail, approval workflow), Recurring, Receipts (+ print), Credit Notes, AR Aging, Outstanding, Transactions | done |
+| Payables | Vendors (+ new), Purchase Invoices, Expenses, Payment Vouchers, Debit Notes, AP Aging, Expense Transactions | done |
+| Items | Items, Item Kits, Units, Item Categories | done (stock lives in the Inventory tab) |
+| Inventory *(industry module)* | Stock on Hand, Movements, Valuation vs GL, Reorder Alerts, Warehouses; receipt / issue / transfer / adjustment / issue-for-invoice | done |
+| Manufacturing *(industry module)* | BOMs, Production Orders (complete / cancel), Material Requirements | done |
+| Jobs · Logistics · Projects *(industry module)* | Jobs with own cost centre + P&L/budget, Shipment Tracker, Vehicles, Trips, Fleet Costs | done |
+| CRM & Assets | Leads, Fixed Assets (+ depreciation run) | done |
+| HR & Payroll | Employees (+ portal access), Payroll Runs (run / post / pay + WPS SIF), Payslips (print), Leave Requests (approve/reject), Employee Portal | done |
+| Reports | Trial Balance, P&L, Balance Sheet, Cash Flow, MIS & Segments, Commission, Audit Log | done |
+| Settings | Company Setup, Companies & Access, Manage Team, Industry & Modules (+ GL mapping), Fiscal Periods (+ close), Cost Centers, Currencies, Tax Configuration, Commission Config, Service Kits, Custom Fields | done (read + key actions; full edit forms for every setting remain in C-ERP) |
+| AI | Ask AI (Claude, read-only tools), Insights, Scan Bill → draft purchase invoice, AI Audit Trail | done |
 
-## 4. Build plan
+## 3b. Industry packs
 
-| Phase | Scope | Rough effort |
+A company picks its industry under **Settings → Industry & Modules**; that switches module tabs on
+and maps the GL accounts module postings use. Modules can also be toggled individually.
+
+| Industry | Default modules | What it adds |
 |---|---|---|
-| **0 — done** | Excel shell, all modules as sheets, TS posting engine + demo books, 10 engine tests | — |
-| **1 — API (read) — done 2026-09-25** | `AegisErp.Api`: auth, company switcher, GET endpoints for every list/report sheet; OpenAPI → TS client; swap `store` reads for TanStack Query | 1–2 weeks |
-| **2 — API (write)** | POST endpoints wrapping existing document services (invoice, receipt, bill, payment, CN/DN, expense, JV incl. Draft→Approve workflow, masters CRUD); replace `store.mutate` with API calls; server errors → status bar | 2–3 weeks |
-| **3 — Depth** | Invoice/estimate/payslip print layouts & PDF, email, imports, recurring generation, multi-currency, ESS portal, custom fields | 2–3 weeks |
-| **4 — AI** | Ask AI via Claude tool-use, bill scanning into a draft Purchase Invoice, anomaly feed, eval set (port `tools/AiQueryEval`) | 2 weeks |
-| **5 — Inventory** | Warehouses, stock moves, valuation (FIFO/avg), COGS posting | 2–3 weeks |
+| General / services | — | Core accounting, AR/AP, payroll, reports |
+| Trading & distribution | Inventory | Warehouses, weighted-average cost, COGS on invoicing, reorder alerts |
+| Retail | Inventory | Store stock, sell-through to COGS, counts & adjustments |
+| Manufacturing | Inventory + Manufacturing | BOMs, production orders, finished goods at material + conversion cost |
+| Logistics & freight | Jobs + Fleet | Shipment job files (mode, AWB/BL, container, ETD/ETA), per-job P&L, vehicles & trips |
+| Construction & projects | Jobs + Inventory | Project budgets vs actual cost, site materials |
+| Professional / PRO services | Jobs | Engagement profitability (C-ERP's PRO service kits stay available) |
 
-Rule to keep throughout: **the UI never computes posted numbers the server disagrees with** — once
-Phase 1 lands, the .NET engine is the single source of truth and `src/engine` becomes a
-test fixture / offline demo only.
+How the modules stay consistent with the books:
+
+- Module data lives in ASCO-owned `asco_*` tables in the **same database** as C-ERP, filtered by the
+  same `CurrentCompany`; C-ERP's code and migrations never touch them.
+- Every module posting goes through **C-ERP's JournalService** (`GlBridge`) — same numbering, period
+  locks, CanPost check and balance rule as any C-ERP document. If saving the module row fails after
+  the voucher posted, a reversing voucher is posted automatically (never a voucher without its document).
+- Stock valuation is reconciled to the GL inventory account on the Valuation sheet.
+- Jobs get their own C-ERP cost centre, so job P&L is read straight from posted GL lines.
+
+## 4. Build plan — all phases delivered
+
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Excel shell, all modules as sheets, TS engine + demo books | done |
+| 1 | Read API over C-ERP services, sign-in, company switcher, live sheets | done |
+| 2 | Write API wrapping C-ERP document services + approval workflow; live entry forms and JV cell entry | done |
+| 3 | Print (tax invoice / receipt / payslips), reminder e-mail, payroll run→post→pay + WPS SIF, depreciation, period close, leave approvals, employee self-service portal, settings sheets | done |
+| 4 | Ask AI (Claude tool-use, read-only, logged), bill scanning → draft purchase invoice, insights feed | done |
+| 5 | Inventory + industry packs (manufacturing, jobs/logistics, fleet) | done |
+
+**Tests:** 10 front-end engine tests + 24 API integration tests (auth, isolation, every read
+endpoint per company, TB/BS balance after postings, approval workflow, closed-period and
+over-allocation refusals, ESS portal, manufacturing costing, stock↔GL reconciliation, job P&L, AI tools).
+
+### What's still open (honest list)
+
+1. **Browser end-to-end pass on the Phase 3–5 screens** — the API behaviour is covered by the integration
+   tests and the UI type-checks and builds, but the new module/AI screens haven't been clicked through in a
+   browser yet (the local server was stopped for low memory).
+2. **Production migrations for `asco_*` tables** — created on first start today; switch to versioned EF
+   migrations before the first client goes live on Postgres.
+3. **Load test** at the target concurrency (see §2b) and shared Data Protection keys when running more than
+   one API instance.
+4. **Settings edit forms** — ASCO has the key settings actions (industry, fiscal periods, currencies,
+   tax codes, cost centres, accounts via API); the long-tail settings pages are still edited in C-ERP.
+5. **Ask AI needs an Anthropic API key** (`Anthropic:ApiKey`), **Scan Bill needs C-ERP's Gemini key**
+   (`Gemini:ApiKey`) — both off until configured; the endpoints say so instead of failing.
+6. **Merge** `feature/excel-ui` into `master` and add a remote.

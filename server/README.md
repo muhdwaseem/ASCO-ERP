@@ -45,6 +45,21 @@ balance sheet balanced per company, company data isolation, and a Viewer blocked
 | Scale-out | No per-user server state. Set `DataProtection:KeysPath` to a shared volume (or move keys to the DB/Redis) so every instance can read the auth cookie; put N instances behind a load balancer; `/health` for probes. |
 | Output | Flat DTOs / C-ERP read-model records only — never raw entity graphs. Enums as strings. |
 
+## Endpoints added after Phase 1
+
+| Area | Endpoints |
+|---|---|
+| Posting (CanPost) | `POST /api/sales-invoices` (+ `/{id}/submit\|approve\|reject\|post\|void\|remind`), `/receipts`, `/credit-notes`, `/estimates/{id}/convert`, `/purchase-invoices`, `/vendor-payments`, `/expenses`, `/debit-notes`, `/vouchers` (+ draft workflow), `/customers`, `/vendors`, `/items`, `/leads` (+ convert), `/fixed-assets` (+ `/depreciation`) |
+| Settings (CanAdminister) | `/accounts`, `/cost-centers`, `/currencies` (+ rate), `/tax-codes`, `/fiscal-periods/generate-year\|{id}/close\|reopen`, `PUT /modules/profile` |
+| Payroll (payroll grant) | `/employees` (+ `/{id}/portal-access`), `/payroll-runs` (+ `/{id}/post\|pay`, `GET /{id}/wps`), `/leave-requests` (+ decide) |
+| Documents | `GET /company-profile`, `/sales-invoices/{id}`, `/receipts/{id}`, `/payroll-runs/{id}`, `/lookups`, `/customers\|vendors/{id}/open-invoices` |
+| Employee portal | `/api/ess/profile\|payslips\|leave\|advances` (employee logins only, own data only) |
+| Industry modules | `/api/modules/catalog\|profile`, `/api/inventory/*`, `/api/manufacturing/*`, `/api/jobs/*`, `/api/fleet/*` |
+| AI | `/api/ai/status`, `POST /api/ai/ask`, `POST /api/ai/scan-bill`, `/api/ai/insights`, `/api/ai/log` |
+
+Business-rule failures from C-ERP (`PostingException`) come back as **400** with C-ERP's own message;
+dates must fall in an **open** fiscal period (the API never falls back to "the last period").
+
 ## Endpoints (Phase 1 — read)
 
 `/api/auth/login|logout|me` · `/api/dashboard` · `/api/accounts` · `/api/opening-balances` ·

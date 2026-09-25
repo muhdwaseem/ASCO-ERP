@@ -103,7 +103,7 @@ Licensing "unlimited users" (like Tally Gold) is a pricing decision, separate fr
 | Phase | Scope | Rough effort |
 |---|---|---|
 | **0 — done** | Excel shell, all modules as sheets, TS posting engine + demo books, 10 engine tests | — |
-| **1 — API (read)** | `AegisErp.Api`: auth, company switcher, GET endpoints for every list/report sheet; OpenAPI → TS client; swap `store` reads for TanStack Query | 1–2 weeks |
+| **1 — API (read) — done 2026-09-25** | `AegisErp.Api`: auth, company switcher, GET endpoints for every list/report sheet; OpenAPI → TS client; swap `store` reads for TanStack Query | 1–2 weeks |
 | **2 — API (write)** | POST endpoints wrapping existing document services (invoice, receipt, bill, payment, CN/DN, expense, JV incl. Draft→Approve workflow, masters CRUD); replace `store.mutate` with API calls; server errors → status bar | 2–3 weeks |
 | **3 — Depth** | Invoice/estimate/payslip print layouts & PDF, email, imports, recurring generation, multi-currency, ESS portal, custom fields | 2–3 weeks |
 | **4 — AI** | Ask AI via Claude tool-use, bill scanning into a draft Purchase Invoice, anomaly feed, eval set (port `tools/AiQueryEval`) | 2 weeks |

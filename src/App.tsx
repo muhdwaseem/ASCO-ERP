@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Save, Undo2, Redo2, ChevronDown, Lightbulb, Share2, X, Check, Plus, ChevronLeft, ChevronRight, Grid3x3, Columns3, PanelBottom, Minus,
   Copy, ArrowDownAZ, ArrowUpAZ, Funnel, Sigma, Download, Printer, FileText, HandCoins, FilePlus, Banknote, Receipt, NotebookPen,
-  Car, Wallet, BadgeCheck, CalendarDays, ChevronUp,
+  Car, Wallet, BadgeCheck, CalendarDays, ChevronUp, RefreshCw, LogOut,
 } from 'lucide-react';
-import './App.css';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, sessionActions, useSession } from './api/client';
+import { LIVE } from './modules/live';
 import { store, useLedger } from './engine/store';
 import { markPayrollPaid, PostingError, postPayroll, runDepreciation } from './engine/ledger';
 import { SCREENS, TABS, screenById, type FormKind, type Row, type RowMeta, type Col } from './modules/registry';
@@ -38,7 +40,19 @@ export default function App() {
   const [qOpen, setQOpen] = useState(false);
   const statusTimer = useRef<number | undefined>(undefined);
 
+  const sess = useSession();
+  const live = sess.mode === 'live';
+  const grant = live ? sess.me!.companies.find((c) => c.id === sess.companyId) : undefined;
+  const qc = useQueryClient();
+
   const screen = screenById(active);
+  const spec = live ? LIVE[active] : undefined;
+  const blocked = !!spec && ((!!spec.payroll && !grant?.canAccessPayroll) || (!!spec.admin && !grant?.canAdminister));
+  const liveQuery = useQuery({
+    queryKey: ['sheet', sess.companyId, spec?.path],
+    queryFn: () => api.get<unknown>(spec!.path, sess.companyId!),
+    enabled: !!spec && !blocked,
+  });
   const sel = sels[active] ?? ORIGIN;
   const setSel = (x: Sel) => setSels((p) => ({ ...p, [active]: x }));
 
@@ -64,10 +78,25 @@ export default function App() {
 
   // ---------- view model for the active sheet
   const view = useMemo(() => {
-    if (screen.kind === 'journal-entry') return { columns: JE_COLUMNS, rows: jeRows(s, draft), editable: jeEditable, onEdit: jeEdit };
-    if (screen.kind === 'ai') return { columns: [] as Col[], rows: [] as Row[] };
-    let rows = screen.rows?.(s) ?? [];
-    const columns = screen.columns ?? [];
+    if (!live && screen.kind === 'journal-entry') return { columns: JE_COLUMNS, rows: jeRows(s, draft), editable: jeEditable, onEdit: jeEdit };
+    if (!live && screen.kind === 'ai') return { columns: [] as Col[], rows: [] as Row[] };
+    const notice = (msg: string, style: RowMeta['style'] = 'muted') => ({ columns: [{ key: 'msg', label: screen.label, width: 620 }] as Col[], rows: [{ msg, _meta: { style } }] as Row[] });
+    const base = (() => {
+      if (!live) return { columns: screen.columns ?? [], rows: screen.rows?.(s) ?? [] };
+      if (active === 'companies') return {
+        columns: [{ key: 'name', label: 'Company', width: 260 }, { key: 'code', label: 'Code', width: 90 }, { key: 'role', label: 'Your Role', width: 110 }, { key: 'subscription', label: 'Subscription', width: 110 }] as Col[],
+        rows: sess.me!.companies.map((c) => ({ name: c.name, code: c.code, role: c.role, subscription: c.subscription })) as Row[],
+      };
+      if (!spec) return notice(`${screen.label} is not connected to the API yet — ${screen.planned ? 'planned module' : 'arrives in Phase 2 with posting / editing'}.`);
+      if (blocked) return notice(spec.payroll ? 'You need the payroll grant for this company to see HR & payroll data.' : 'Company administrator access is required.', 'warn');
+      if (liveQuery.isPending) return notice('Loading…');
+      if (liveQuery.isError) return notice(liveQuery.error.message, 'warn');
+      const rows = (spec.rows ? spec.rows(liveQuery.data) : liveQuery.data) as Row[];
+      const hasData = rows.some((r) => !(r._meta as RowMeta | undefined)?.style?.match(/total|grand/));
+      return { columns: spec.columns, rows: hasData ? rows : [{ [spec.columns[0].key]: 'No records in this company yet.', _meta: { style: 'muted' } } as Row] };
+    })();
+    let rows = base.rows;
+    const columns = base.columns;
     if (filter.on && filter.text.trim()) {
       const f = filter.text.toLowerCase();
       rows = rows.filter((r) => !(r._meta as RowMeta | undefined)?.style?.match(/total|grand|group/) && columns.some((c) => String(r[c.key] ?? '').toLowerCase().includes(f)));
@@ -84,7 +113,7 @@ export default function App() {
       rows = [...body, ...tail];
     }
     return { columns, rows };
-  }, [screen, s, draft, filter, sorts, active]);
+  }, [screen, s, draft, filter, sorts, active, live, spec, blocked, liveQuery.data, liveQuery.status, liveQuery.error, sess.me]);
 
   // ---------- selection stats (Excel status bar)
   const stats = useMemo(() => {
@@ -155,6 +184,7 @@ export default function App() {
         { label: 'Copy', icon: Copy, color: C.gray, small: true, run: copy, title: 'Copy (Ctrl+C)' },
         { label: 'Export CSV', icon: Download, color: C.gray, small: true, run: toCsv },
         { label: 'Print', icon: Printer, color: C.gray, small: true, run: () => window.print() },
+        { label: 'Refresh', icon: RefreshCw, color: C.gray, small: true, run: () => { if (live) { qc.invalidateQueries(); notify('Refreshed from the server'); } else notify('Demo data lives in this browser — nothing to refresh'); } },
       ] },
       { group: 'Quick Entry', position: 'start', actions: [
         { label: 'New Invoice', icon: FileText, color: C.green, ...newDoc('sales-invoice') },
@@ -212,14 +242,32 @@ export default function App() {
     ? SCREENS.filter((x) => `${x.label} ${x.tab} ${x.group}`.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
     : [];
 
-  const statusMsg = status?.msg ?? (editableActive ? 'Enter' : screen.note && active === 'journal-voucher' ? screen.note : 'Ready');
+  const statusMsg = status?.msg ?? (live && liveQuery.isFetching ? 'Loading…' : editableActive ? 'Enter' : screen.note && active === 'journal-voucher' && !live ? screen.note : 'Ready');
+  // Phase 1 is read-only against the API: write actions stay available in demo mode only.
+  const WRITE = /^(New |Journal$|Post|Run |Mark|Close)/;
+  const ribbonExtra = (extra[tab] ?? []).map((g) => ({
+    ...g,
+    actions: g.actions.map((a) => (live && WRITE.test(a.label) ? { ...a, disabled: true, title: `${a.label} — arrives in Phase 2 (posting through the API)` } : a)),
+  }));
+  const companyName = live ? grant?.name ?? '' : s.company.name;
+  const userName = live ? sess.me!.displayName : 'Demo user';
+  const initials = userName.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <div className="app">
       <header className="titlebar">
         <div className="tb-left"><div className="logo">A</div></div>
-        <div className="tb-title">{s.company.name} - ASCO</div>
-        <div className="tb-right"><span className="tb-user">Firm Admin</span><span className="avatar">FA</span></div>
+        <div className="tb-title">{companyName} - ASCO</div>
+        <div className="tb-right">
+          <span className={live ? 'mode-pill live' : 'mode-pill'}>{live ? `Live · ${grant?.role}` : 'Demo data'}</span>
+          {live && sess.me!.companies.length > 1 && (
+            <select className="tb-company" value={sess.companyId ?? ''} onChange={(e) => sessionActions.switchCompany(Number(e.target.value))} aria-label="Switch company">
+              {sess.me!.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+          <span className="tb-user">{userName}</span><span className="avatar">{initials}</span>
+          <button className="tb-signout" title="Sign out" aria-label="Sign out" onClick={() => sessionActions.signOut()}><LogOut size={14} /></button>
+        </div>
       </header>
 
       <nav className="menubar">
@@ -251,7 +299,7 @@ export default function App() {
         <button className="share" onClick={toCsv}><Share2 size={14} /> Export <ChevronDown size={12} /></button>
       </nav>
 
-      {!collapsed && <Ribbon tab={tab} active={active} onOpen={openSheet} extra={extra[tab] ?? []} onCollapse={() => setCollapsed(true)} />}
+      {!collapsed && <Ribbon tab={tab} active={active} onOpen={openSheet} extra={ribbonExtra} onCollapse={() => setCollapsed(true)} />}
 
       <div className="qat">
         <button title="Save (auto-saved)" onClick={() => notify('All changes are posted immediately — nothing to save')}><Save size={16} /></button>
@@ -263,7 +311,7 @@ export default function App() {
       </div>
 
       <div className="formulabar">
-        <div className="namebox">{screen.kind === 'ai' ? '' : `${colName(sel.c)}${sel.r + 1}`}<ChevronDown size={12} /></div>
+        <div className="namebox">{!live && screen.kind === 'ai' ? '' : `${colName(sel.c)}${sel.r + 1}`}<ChevronDown size={12} /></div>
         <div className="fb-sep">⋮</div>
         <button className="fb-btn" disabled><X size={16} /></button>
         <button className="fb-btn" disabled><Check size={16} /></button>
@@ -279,8 +327,8 @@ export default function App() {
       </div>
 
       <main className="sheet">
-        {screen.kind === 'journal-entry' && <JeHeader onPost={postJv} />}
-        {screen.kind === 'ai' ? (
+        {!live && screen.kind === 'journal-entry' && <JeHeader onPost={postJv} />}
+        {!live && screen.kind === 'ai' ? (
           <AiPanel />
         ) : (
           <Grid columns={view.columns} rows={view.rows} sel={sel} onSel={setSel} zoom={zoom} editable={view.editable} onEdit={view.onEdit} />
@@ -318,7 +366,7 @@ export default function App() {
         const target: Record<FormKind, string> = { 'sales-invoice': 'sales-invoices', 'purchase-invoice': 'purchase-invoices', receipt: 'receipts', payment: 'payments', expense: 'expenses' };
         setForm(null); openSheet(target[form]); notify(msg);
       }} />}
-      {backstage && <Backstage onClose={() => setBackstage(false)} onExport={toCsv} />}
+      {backstage && <Backstage live={live ? { company: companyName, role: grant?.role ?? '', user: sess.me!.email } : undefined} onClose={() => setBackstage(false)} onExport={toCsv} />}
     </div>
   );
 }

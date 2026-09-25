@@ -7,6 +7,17 @@ module, name box + formula bar, worksheet grid, sheet tabs, and Excel's status-b
 
 ## Run
 
+Live mode (real books through the .NET API — see [`server/README.md`](server/README.md)):
+
+```bash
+dotnet run --project server/Asco.Api --artifacts-path artifacts   # API on :5080
+npm run dev                                                      # UI, proxies /api
+```
+
+Then sign in with a C-ERP account, or pick **Explore with demo data** for the offline workbook.
+
+Front end only:
+
 ```bash
 npm install
 npm run dev      # http://localhost:5173
@@ -28,8 +39,8 @@ npm run build    # type-check + production build
 - Sort A→Z / Z→A, Filter, AutoSum, Ctrl+C copies ranges as TSV, CSV export, print, zoom.
 - "Tell me what you want to do" (Alt+Q) searches every sheet.
 
-Data lives in memory — a refresh resets to the demo books (File → Reset demo data does the same).
-Phase 1 of the plan replaces `src/engine/store.ts` with calls to an API over C-ERP's .NET services.
+Demo mode keeps data in memory (a refresh resets it). Live mode (Phase 1) is read-only: every sheet with a
+`LIVE` entry in `src/modules/live.ts` loads from the API; creating/posting documents through the API is Phase 2.
 
 ## Layout
 

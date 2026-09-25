@@ -2,9 +2,10 @@
 import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { store, useLedger } from '../engine/store';
+import { sessionActions } from '../api/client';
 import { trialBalance } from '../engine/ledger';
 
-export function Backstage({ onClose, onExport }: { onClose: () => void; onExport: () => void }) {
+export function Backstage({ onClose, onExport, live }: { onClose: () => void; onExport: () => void; live?: { company: string; role: string; user: string } }) {
   const s = useLedger();
   const [page, setPage] = useState<'info' | 'about'>('info');
   const tb = trialBalance(s);
@@ -16,11 +17,22 @@ export function Backstage({ onClose, onExport }: { onClose: () => void; onExport
         <button className={page === 'info' ? 'on' : ''} onClick={() => setPage('info')}>Info</button>
         <button onClick={() => { onExport(); onClose(); }}>Export sheet (CSV)</button>
         <button onClick={() => { onClose(); setTimeout(() => window.print(), 50); }}>Print</button>
-        <button onClick={() => { store.reset(); onClose(); }}>Reset demo data</button>
+        {!live && <button onClick={() => { store.reset(); onClose(); }}>Reset demo data</button>}
+        <button onClick={() => { onClose(); sessionActions.signOut(); }}>{live ? 'Sign out' : 'Exit demo'}</button>
         <button className={page === 'about' ? 'on' : ''} onClick={() => setPage('about')}>About</button>
       </nav>
       <section>
-        {page === 'info' ? (
+        {page === 'info' && live ? (
+          <>
+            <h1>{live.company}</h1>
+            <dl>
+              <dt>Data source</dt><dd>Live — ASCO API over the C-ERP accounting core</dd>
+              <dt>Signed in as</dt><dd>{live.user}</dd>
+              <dt>Your role</dt><dd>{live.role}</dd>
+              <dt>Posting</dt><dd>Read-only in this build (Phase 1). Creating and posting documents arrives in Phase 2.</dd>
+            </dl>
+          </>
+        ) : page === 'info' ? (
           <>
             <h1>{s.company.name}</h1>
             <dl>
@@ -35,7 +47,7 @@ export function Backstage({ onClose, onExport }: { onClose: () => void; onExport
         ) : (
           <>
             <h1>ASCO</h1>
-            <p>ASCO — Excel-style accounting software covering the full C-ERP module set. This build runs a TypeScript port of the posting engine in the browser with demo data; the production plan puts it on the existing ASP.NET Core domain + PostgreSQL via a Web API. See <code>docs/STACK-AND-PLAN.md</code>.</p>
+            <p>ASCO — Excel-style accounting software covering the full C-ERP module set. This build runs a TypeScript port of the posting engine in the browser with demo data; Signed in, it reads live books through the ASCO API (ASP.NET Core over C-ERP's accounting core + PostgreSQL); demo mode runs a TypeScript port of the posting engine in the browser. See <code>docs/STACK-AND-PLAN.md</code>.</p>
           </>
         )}
       </section>

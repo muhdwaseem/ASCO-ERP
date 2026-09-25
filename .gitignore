@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 
 .playwright-mcp/
+artifacts/
+*.db
+*.db-shm
+*.db-wal
+server/**/bin/
+server/**/obj/

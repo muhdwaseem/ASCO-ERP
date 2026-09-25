@@ -15,7 +15,7 @@ import { DocForm } from './components/DocForm';
 import { AiPanel } from './components/AiPanel';
 import { Backstage } from './components/Backstage';
 
-const USER = 'owner@aegisbooks.local';
+const USER = 'owner@asco.local';
 const ORIGIN: Sel = { r: 1, c: 0, r2: 1, c2: 0 };
 const C = { green: '#33b36b', blue: '#4f9bea', orange: '#f0a33a', red: '#e5534b', teal: '#2bb3a8', gray: '#b8b8b8', purple: '#a57be8' };
 const monthEnd = (d = new Date()) => new Date(Date.UTC(d.getFullYear(), d.getMonth() + 1, 0)).toISOString().slice(0, 10);
@@ -218,7 +218,7 @@ export default function App() {
     <div className="app">
       <header className="titlebar">
         <div className="tb-left"><div className="logo">A</div></div>
-        <div className="tb-title">{s.company.name} - Aegis Books</div>
+        <div className="tb-title">{s.company.name} - ASCO</div>
         <div className="tb-right"><span className="tb-user">Firm Admin</span><span className="avatar">FA</span></div>
       </header>
 

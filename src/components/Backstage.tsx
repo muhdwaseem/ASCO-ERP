@@ -34,8 +34,8 @@ export function Backstage({ onClose, onExport }: { onClose: () => void; onExport
           </>
         ) : (
           <>
-            <h1>Aegis Books</h1>
-            <p>Excel-style accounting front end over the Aegis ERP (C-ERP) module set. This build runs a TypeScript port of the posting engine in the browser with demo data; the production plan puts it on the existing ASP.NET Core domain + PostgreSQL via a Web API. See <code>docs/STACK-AND-PLAN.md</code>.</p>
+            <h1>ASCO</h1>
+            <p>ASCO — Excel-style accounting software covering the full C-ERP module set. This build runs a TypeScript port of the posting engine in the browser with demo data; the production plan puts it on the existing ASP.NET Core domain + PostgreSQL via a Web API. See <code>docs/STACK-AND-PLAN.md</code>.</p>
           </>
         )}
       </section>

@@ -7,7 +7,7 @@ import {
   postPurchaseInvoice, postReceipt, postSalesInvoice, runDepreciation, invoiceOutstanding, billOutstanding,
 } from './ledger';
 
-const U = 'owner@aegisbooks.local';
+const U = 'owner@asco.local';
 
 // Standard_Chart_of_Accounts_Import.csv from C-ERP (headers) + postable children.
 const HEADERS: [string, string, AccountType, string?, string?, string?][] = [
@@ -59,7 +59,7 @@ const monthEnd = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).toISOStri
 
 export function seed(): LedgerState {
   const s: LedgerState = {
-    company: { name: 'Aegis Demo Advisory LLC', trn: '100345678900003', baseCurrency: 'AED', address: 'Office 1204, Business Bay, Dubai, UAE', proServiceMode: true },
+    company: { name: 'Demo Advisory LLC', trn: '100345678900003', baseCurrency: 'AED', address: 'Office 1204, Business Bay, Dubai, UAE', proServiceMode: true },
     accounts: buildAccounts(), vouchers: [],
     customers: [
       { code: 'C-0001', name: 'Al Noor Trading LLC', trn: '100200300400003', email: 'accounts@alnoor.ae', mobile: '+971 50 111 2233', group: 'Trading', currency: 'AED', creditLimit: 50000, paymentTermsDays: 30, salesperson: 'AG-001' },
@@ -106,8 +106,8 @@ export function seed(): LedgerState {
       { name: 'Tom Becker', companyName: 'Harbor Freight Middle East', mobile: '+971 58 900 1005', source: 'Website', stage: 'Won', estimatedValue: 36000, assignedTo: 'AG-001', lastActivity: '2026-08-30' },
     ],
     agents: [
-      { agentCode: 'AG-001', name: 'Khalid Rahman', phone: '+971 50 700 1111', email: 'khalid@aegisbooks.local', commissionRate: 0.05, status: 'Active' },
-      { agentCode: 'AG-002', name: 'Priya Nair', phone: '+971 55 700 2222', email: 'priya@aegisbooks.local', commissionRate: 0.04, status: 'Active' },
+      { agentCode: 'AG-001', name: 'Khalid Rahman', phone: '+971 50 700 1111', email: 'khalid@asco.local', commissionRate: 0.05, status: 'Active' },
+      { agentCode: 'AG-002', name: 'Priya Nair', phone: '+971 55 700 2222', email: 'priya@asco.local', commissionRate: 0.04, status: 'Active' },
     ],
     periods: Array.from({ length: 12 }, (_, i) => ({
       name: new Date(Date.UTC(2026, i, 1)).toLocaleString('en', { month: 'short', year: 'numeric', timeZone: 'UTC' }),
@@ -219,6 +219,6 @@ export function seed(): LedgerState {
   // Close H1
   for (const p of s.periods) if (p.periodNo <= 6) p.isClosed = true;
   s.audit.unshift({ at: '2026-07-05 10:12', user: U, action: 'Closed period', entity: 'Fiscal Period', detail: 'Jan–Jun 2026 closed for posting' });
-  s.audit.push({ at: '2026-03-02 09:40', user: 'accounts@aegisbooks.local', action: 'Reassigned', entity: 'Customer', detail: 'C-0003 salesperson AG-002 → AG-001' });
+  s.audit.push({ at: '2026-03-02 09:40', user: 'accounts@asco.local', action: 'Reassigned', entity: 'Customer', detail: 'C-0003 salesperson AG-002 → AG-001' });
   return s;
 }

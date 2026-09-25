@@ -1,4 +1,4 @@
-# Aegis Books — stack decision & build plan
+# ASCO — stack decision & build plan
 
 Goal: an accounting product with **every module of C-ERP (Aegis ERP)**, an **Excel-style UI**
 (dark ribbon, name box + formula bar, grid, sheet tabs, status-bar Sum/Count/Average), and room
@@ -30,6 +30,24 @@ for **AI features** later.
 Postgres — the CRMgold stack). Only choose this if you're willing to re-implement and re-test the
 posting engine, numbering locks, allocation locks and multi-tenant filters; the TypeScript port in
 `src/engine` is a starting point but is **demo-grade**, not production-grade.
+
+### Python backend option
+
+Python is a good fit for accounting software — the two biggest open-source ERPs (Odoo, ERPNext) are Python — and it is the strongest language for the AI work planned in Phase 4.
+
+| Choice | Pick | Notes |
+|---|---|---|
+| Framework | **Django 5 + Django REST Framework** (or Django Ninja) | Built-in auth, permissions, admin screens, ORM + migrations, `transaction.atomic`, `select_for_update()` row locks — exactly what the posting engine needs. Prefer it over FastAPI here: FastAPI means assembling auth, admin and migrations yourself. |
+| Database | PostgreSQL (Supabase) | Same as today. |
+| Money | `Decimal` fields everywhere (never float) | |
+| Background jobs | Celery or Django-Q + Redis | Recurring invoices, depreciation runs, emails, AI bill scanning. |
+| Tests | pytest + pytest-django | Port C-ERP's 545 tests as the acceptance suite. |
+| AI | `anthropic` Python SDK | Tool-use over report queries, bill-scan PDF/image extraction, pandas for analysis. |
+| Front end | **Unchanged — this React app** | Python can't render an Excel-grade UI in the browser; the React shell talks to the Django API. |
+
+**Cost:** everything in C-ERP's .NET layers must be re-written in Python — posting engine, numbering locks, allocation locks, multi-company isolation, HR/payroll/WPS, depreciation, reports — and re-proven with tests. Roughly **+6–10 weeks** vs. keeping the .NET core, and the live client stays on C-ERP until ASCO reaches parity.
+
+**Middle path:** keep the .NET accounting core and add a **Python AI service** (FastAPI + `anthropic`) that the .NET API calls for Ask AI / bill scanning / insights. You get Python where it's strongest without rewriting the ledger.
 
 ## 3. Module parity (C-ERP NavMenu → ribbon)
 

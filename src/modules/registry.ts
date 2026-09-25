@@ -474,9 +474,9 @@ export const SCREENS: Screen[] = [
     id: 'users', label: 'Manage Team', tab: 'Settings', group: 'Company', icon: UserCog, color: C.purple,
     columns: [t('email', 'User', 230), t('role', 'Role', 120), t('company', 'Company Access', 220), t('payroll', 'Payroll Access', 110)],
     rows: (s) => [
-      { email: 'owner@aegisbooks.local', role: 'FirmAdmin', company: 'All companies', payroll: 'Yes' },
-      { email: 'accounts@aegisbooks.local', role: 'Accountant', company: s.company.name, payroll: 'No' },
-      { email: 'readonly@aegisbooks.local', role: 'Viewer', company: s.company.name, payroll: 'No' },
+      { email: 'owner@asco.local', role: 'FirmAdmin', company: 'All companies', payroll: 'Yes' },
+      { email: 'accounts@asco.local', role: 'Accountant', company: s.company.name, payroll: 'No' },
+      { email: 'readonly@asco.local', role: 'Viewer', company: s.company.name, payroll: 'No' },
     ],
   },
   {

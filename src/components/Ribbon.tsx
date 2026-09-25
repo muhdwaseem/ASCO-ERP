@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import { ChevronUp } from 'lucide-react';
-import { SCREENS } from '../modules/registry';
+import { SCREENS, type Screen } from '../modules/registry';
 
 export interface Action {
   label: string; icon: LucideIcon; color: string; run: () => void; small?: boolean; disabled?: boolean; title?: string;
@@ -15,6 +15,8 @@ interface Props {
   onOpen: (id: string) => void;
   extra: ActionGroup[];
   onCollapse: () => void;
+  /** Hides screens of modules the company hasn't enabled. */
+  screenFilter?: (s: Screen) => boolean;
 }
 
 function Big({ a, on }: { a: Action; on?: boolean }) {
@@ -53,8 +55,8 @@ function Group({ label, actions, active }: { label: string; actions: (Action & {
   );
 }
 
-export function Ribbon({ tab, active, onOpen, extra, onCollapse }: Props) {
-  const screens = SCREENS.filter((x) => x.tab === tab);
+export function Ribbon({ tab, active, onOpen, extra, onCollapse, screenFilter }: Props) {
+  const screens = SCREENS.filter((x) => x.tab === tab && (!screenFilter || screenFilter(x)));
   const groups = [...new Set(screens.map((x) => x.group))];
   const pre = extra.filter((g) => g.position === 'start');
   const post = extra.filter((g) => g.position !== 'start');

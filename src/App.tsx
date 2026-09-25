@@ -3,13 +3,15 @@ import {
   Save, Undo2, Redo2, ChevronDown, Lightbulb, Share2, X, Check, Plus, ChevronLeft, ChevronRight, Grid3x3, Columns3, PanelBottom, Minus,
   Copy, ArrowDownAZ, ArrowUpAZ, Funnel, Sigma, Download, Printer, FileText, HandCoins, FilePlus, Banknote, Receipt, NotebookPen,
   Car, Wallet, BadgeCheck, CalendarDays, ChevronUp, RefreshCw, LogOut, UserPlus, Building2, Mail, FileDown,
+  Warehouse, PackagePlus, PackageMinus, ArrowLeftRight, SlidersHorizontal, FileOutput, Layers, Factory, CircleCheck, CircleX, Briefcase, Truck, Route, Settings2,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, sessionActions, useSession, type Lookups } from './api/client';
 import { LIVE } from './modules/live';
 import { store, useLedger } from './engine/store';
 import { markPayrollPaid, PostingError, postPayroll, runDepreciation } from './engine/ledger';
-import { SCREENS, TABS, screenById, type FormKind, type Row, type RowMeta, type Col } from './modules/registry';
+import { SCREENS, TABS, MODULE_TABS, screenById, type FormKind, type Row, type RowMeta, type Col, type Screen } from './modules/registry';
+import { ModuleForm, MODULE_FORMS } from './components/ModuleForm';
 import { Grid, colName, fmt, cellValue, type Sel } from './components/Grid';
 import { Ribbon, type ActionGroup } from './components/Ribbon';
 import { JE_COLUMNS, jeEditable, jeEdit, jeRows, JeHeader, postDraft, postDraftLive, demoResolver, useJeDraft, type AccountResolver } from './components/JournalEntry';
@@ -36,6 +38,7 @@ export default function App() {
   const [zoom, setZoom] = useState(100);
   const [form, setForm] = useState<FormKind | null>(null);
   const [liveForm, setLiveForm] = useState<LiveFormKind | null>(null);
+  const [moduleForm, setModuleForm] = useState<string | null>(null);
   const [formContext, setFormContext] = useState<{ employeeId: number; name?: string } | undefined>(undefined);
   const [printing, setPrinting] = useState<{ kind: PrintKind; id: number } | null>(null);
   const [backstage, setBackstage] = useState(false);
@@ -58,6 +61,12 @@ export default function App() {
     queryFn: () => api.get<unknown>(spec!.path, sess.companyId!),
     enabled: !!spec && !blocked,
   });
+  // Industry profile: which module tabs this company sees (demo shows every module as a preview).
+  const profile = useQuery({ queryKey: ['sheet', sess.companyId, '/modules/profile'], queryFn: () => api.get<{ industry: string; modules: string[]; jobLabel: string }>('/modules/profile', sess.companyId!), enabled: live });
+  const enabledModules = live ? profile.data?.modules ?? [] : ['inventory', 'manufacturing', 'jobs', 'fleet'];
+  const screenVisible = (x: Screen) => !x.module || enabledModules.includes(x.module);
+  const visibleTabs = TABS.filter((t) => !MODULE_TABS[t] || enabledModules.includes(MODULE_TABS[t]));
+  const tabLabel = (t: string) => (t === 'Jobs' ? (profile.data?.industry === 'Logistics' ? 'Logistics' : profile.data?.industry === 'Construction' ? 'Projects' : 'Jobs') : t);
   const lookups = useQuery({ queryKey: ['lookups', sess.companyId], queryFn: () => api.get<Lookups>('/lookups', sess.companyId!), enabled: live, staleTime: 60_000 });
   const resolver: AccountResolver = useMemo(() => {
     if (!live) return demoResolver(s);
@@ -238,6 +247,39 @@ export default function App() {
       ] },
     ],
     Payables: [{ group: 'New', actions: [{ label: 'New Bill', icon: FilePlus, color: C.orange, ...newDoc('purchase-invoice') }, { label: 'New Payment', icon: Banknote, color: C.orange, ...newDoc('payment') }, { label: 'New Expense', icon: Receipt, color: C.red, ...newDoc('expense') }, { label: 'New Vendor', icon: Building2, color: C.blue, needs: 'post', run: () => setLiveForm('vendor') }] }],
+    Inventory: [
+      { group: 'Stock In / Out', actions: [
+        { label: 'Stock Receipt', icon: PackagePlus, color: C.green, needs: 'post', run: () => setModuleForm('receipt') },
+        { label: 'Stock Issue', icon: PackageMinus, color: C.orange, needs: 'post', run: () => setModuleForm('issue') },
+        { label: 'Transfer', icon: ArrowLeftRight, color: C.blue, needs: 'post', run: () => setModuleForm('transfer') },
+        { label: 'Adjustment', icon: SlidersHorizontal, color: C.red, needs: 'post', run: () => setModuleForm('adjustment') },
+        { label: 'Issue for Invoice', icon: FileOutput, color: C.teal, needs: 'post', run: () => setModuleForm('issue-invoice') },
+      ] },
+      { group: 'Setup', position: 'end', actions: [
+        { label: 'New Warehouse', icon: Warehouse, color: C.gray, small: true, needs: 'post', run: () => setModuleForm('warehouse') },
+        { label: 'Reorder Level', icon: SlidersHorizontal, color: C.gray, small: true, needs: 'post', run: () => setModuleForm('reorder') },
+      ] },
+    ],
+    Manufacturing: [{ group: 'Production', actions: [
+      { label: 'New BOM', icon: Layers, color: C.purple, needs: 'post', run: () => setModuleForm('bom') },
+      { label: 'New Order', icon: Factory, color: C.orange, needs: 'post', run: () => setModuleForm('production-order') },
+      { label: 'Complete Order', icon: CircleCheck, color: C.green, needs: 'post', run: () => {
+        if (active !== 'production-orders' || !activeId) return notify('Select a released order on the Production Orders sheet first', 'err');
+        liveRun(async () => { const r = await api.post<{ orderNo: string; unitCost: number; materialCost: number; conversionCost: number }>(`/manufacturing/orders/${activeId}/complete`, { date: today }, cid); return `Completed ${r.orderNo}: material ${r.materialCost} + conversion ${r.conversionCost} → unit cost ${r.unitCost}`; });
+      } },
+      { label: 'Cancel Order', icon: CircleX, color: C.red, needs: 'post', run: () => {
+        if (active !== 'production-orders' || !activeId) return notify('Select a released order on the Production Orders sheet first', 'err');
+        liveRun(async () => { await api.post(`/manufacturing/orders/${activeId}/cancel`, {}, cid); return 'Production order cancelled'; });
+      } },
+    ] }],
+    Jobs: [{ group: 'Operations', actions: [
+      { label: 'New Job', icon: Briefcase, color: C.blue, needs: 'post', run: () => setModuleForm('job') },
+      { label: 'Job Status', icon: CircleCheck, color: C.teal, needs: 'post', run: () => setModuleForm('job-status') },
+      ...(enabledModules.includes('fleet') ? [
+        { label: 'New Vehicle', icon: Truck, color: C.orange, needs: 'post' as const, run: () => setModuleForm('vehicle') },
+        { label: 'Log Trip', icon: Route, color: C.green, needs: 'post' as const, run: () => setModuleForm('trip') },
+      ] : []),
+    ] }],
     'CRM & Assets': [{ group: 'Run', actions: [{ label: 'Run Depreciation', icon: Car, color: C.teal, needs: 'post', run: () => (live
       ? liveRun(async () => { const r = await api.post<{ voucher?: string; message?: string }>('/fixed-assets/depreciation', {}, cid); return r.voucher ? `Posted depreciation ${r.voucher}` : r.message ?? 'Nothing to depreciate'; })
       : run('', () => `Posted ${runDepreciation(store.get(), monthEnd(), USER)} for ${monthEnd().slice(0, 7)}`)) }] }],
@@ -287,7 +329,7 @@ export default function App() {
       } },
     ] }],
     Reports: [{ group: 'Output', actions: [{ label: 'Export CSV', icon: Download, color: C.gray, run: toCsv }, { label: 'Print', icon: Printer, color: C.gray, run: () => window.print() }] }],
-    Settings: [{ group: 'Period End', actions: [{ label: 'Close Period', icon: CalendarDays, color: C.red, needs: 'admin', run: () => live ? liveRun(async () => {
+    Settings: [{ group: 'Industry', actions: [{ label: 'Configure Industry', icon: Settings2, color: C.teal, needs: 'admin', run: () => setModuleForm('industry') }] }, { group: 'Period End', actions: [{ label: 'Close Period', icon: CalendarDays, color: C.red, needs: 'admin', run: () => live ? liveRun(async () => {
       const periods = await api.get<{ id: number; name: string; endDate: string; isClosed: boolean }[]>('/fiscal-periods', cid);
       const p = periods.find((x) => !x.isClosed && x.endDate < today);
       if (!p) throw new Error('No completed period left to close.');
@@ -312,7 +354,7 @@ export default function App() {
   });
 
   const results = q.trim()
-    ? SCREENS.filter((x) => `${x.label} ${x.tab} ${x.group}`.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
+    ? SCREENS.filter((x) => screenVisible(x) && `${x.label} ${x.tab} ${x.group}`.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
     : [];
 
   const statusMsg = status?.msg ?? (live && liveQuery.isFetching ? 'Loading…' : editableActive ? 'Enter' : screen.note && active === 'journal-voucher' && !live ? screen.note : 'Ready');
@@ -325,7 +367,7 @@ export default function App() {
     if (n === 'admin' && !grant?.canAdminister) return 'Needs company administrator access';
     return null;
   };
-  const liveOnly = (label: string) => !live && /^(New Customer|New Vendor|Send Reminder|WPS File|Approve Leave|Reject Leave|Portal Access)$/.test(label);
+  const liveOnly = (label: string) => !live && (/^(New Customer|New Vendor|Send Reminder|WPS File|Approve Leave|Reject Leave|Portal Access|Configure Industry)$/.test(label) || ['Inventory', 'Manufacturing', 'Jobs'].includes(tab));
   const ribbonExtra = (extra[tab] ?? []).map((g) => ({
     ...g,
     actions: g.actions.map((a) => {
@@ -356,8 +398,8 @@ export default function App() {
 
       <nav className="menubar">
         <button className="mb-file" onClick={() => setBackstage(true)}>File</button>
-        {TABS.map((t) => (
-          <button key={t} className={t === tab ? 'mb-tab on' : 'mb-tab'} onClick={() => { setTab(t); setCollapsed(false); }}>{t}</button>
+        {visibleTabs.map((t) => (
+          <button key={t} className={t === tab ? 'mb-tab on' : 'mb-tab'} onClick={() => { setTab(t); setCollapsed(false); }}>{tabLabel(t)}</button>
         ))}
         <div className="tellme">
           <Lightbulb size={16} />
@@ -383,7 +425,7 @@ export default function App() {
         <button className="share" onClick={toCsv}><Share2 size={14} /> Export <ChevronDown size={12} /></button>
       </nav>
 
-      {!collapsed && <Ribbon tab={tab} active={active} onOpen={openSheet} extra={ribbonExtra} onCollapse={() => setCollapsed(true)} />}
+      {!collapsed && <Ribbon tab={tab} active={active} onOpen={openSheet} extra={ribbonExtra} onCollapse={() => setCollapsed(true)} screenFilter={screenVisible} />}
 
       <div className="qat">
         <button title="Save (auto-saved)" onClick={() => notify('All changes are posted immediately — nothing to save')}><Save size={16} /></button>
@@ -451,6 +493,7 @@ export default function App() {
         setForm(null); openSheet(target[form]); notify(msg);
       }} />}
       {liveForm && <LiveDocForm kind={liveForm} companyId={cid} context={formContext} onClose={() => setLiveForm(null)} onDone={(msg) => { const t = LIVE_TARGET[liveForm]; setLiveForm(null); openSheet(t); notify(msg); }} />}
+      {moduleForm && <ModuleForm spec={MODULE_FORMS[moduleForm]} companyId={cid} onClose={() => setModuleForm(null)} onDone={(msg, target) => { setModuleForm(null); if (target) openSheet(target); notify(msg); }} />}
       {printing && <PrintDoc kind={printing.kind} id={printing.id} companyId={cid} onClose={() => setPrinting(null)} />}
       {backstage && <Backstage live={live ? { company: companyName, role: grant?.role ?? '', user: sess.me!.email } : undefined} onClose={() => setBackstage(false)} onExport={toCsv} />}
     </div>

@@ -291,6 +291,93 @@ export const LIVE: Record<string, LiveSpec> = {
     columns: [t('module', 'Entity', 120), t('label', 'Field', 220), t('fieldType', 'Type', 100), t('dropdownOptionsCsv', 'Options', 240), t('required', 'Required', 70), t('active', 'Active', 60)],
     rows: (xs: J[]) => xs.map((x) => ({ ...x, required: x.isRequired ? 'Yes' : 'No', active: x.isActive ? 'Yes' : 'No' })),
   },
+  // ── Industry modules ─────────────────────────────────────────────────
+  'industry-modules': {
+    path: '/modules/profile',
+    columns: [t('field', 'Setting', 260), t('value', 'Value', 420)],
+    rows: (x: J) => [
+      { field: 'Industry', value: x.industryName, ...meta('total') },
+      { field: 'Enabled modules', value: (x.modules as string[]).join(', ') || 'none — core accounting only' },
+      { field: 'Jobs are called', value: x.jobLabel },
+      { field: 'GL MAPPING (account ids)', ...meta('group') },
+      ...[['Inventory control', 'inventoryAccountId'], ['Cost of goods sold', 'cogsAccountId'], ['Goods-received clearing', 'stockClearingAccountId'], ['Stock adjustments', 'stockAdjustmentAccountId'], ['Production overhead absorbed', 'conversionCostAccountId'], ['Fleet running costs', 'fleetExpenseAccountId']]
+        .map(([label, k]) => ({ field: label, value: x.profile?.[k] ? `#${x.profile[k]}` : '— not mapped —', ...meta(undefined, 1) })),
+    ],
+  },
+  'stock-on-hand': {
+    path: '/inventory/stock',
+    columns: [t('itemCode', 'Item', 90), t('itemName', 'Description', 220), t('unit', 'Unit', 60), t('warehouse', 'Warehouse', 90), n('quantity', 'On Hand', 90), m('avgCost', 'Avg Cost', 100), m('value', 'Value', 120), n('itemTotal', 'Item Total', 90), n('reorderLevel', 'Reorder At', 90), t('flag', 'Status', 110)],
+    rows: (xs: J[]) => [...xs.map((x) => ({ ...x, flag: x.belowReorder ? 'Reorder now' : 'OK', ...(x.belowReorder ? meta('warn') : {}) })), total(xs, 'itemName', ['value'])],
+  },
+  'stock-moves': {
+    path: '/inventory/moves',
+    columns: [t('moveNo', 'Move No', 120), t('type', 'Type', 130), d('date', 'Date'), t('reference', 'Reference', 120), t('narration', 'Narration', 220), n('lines', 'Lines', 56), m('value', 'Value'), t('voucherNo', 'GL Voucher', 120), t('createdBy', 'By', 140)],
+    rows: (xs: J[]) => xs.map((x) => ({ ...x, lines: x.lines.length })),
+  },
+  'stock-valuation': {
+    path: '/inventory/valuation',
+    columns: [t('itemCode', 'Item', 90), t('itemName', 'Description', 240), n('quantity', 'Quantity', 100), m('avgCost', 'Avg Cost', 110), m('value', 'Value', 130)],
+    rows: (x: J) => [
+      ...x.rows,
+      { itemName: 'Stock ledger value', value: x.totalValue, ...meta('grand') },
+      ...(x.glInventoryBalance == null ? [{ itemName: 'Map the inventory account to reconcile with the GL', ...meta('muted') }] : [
+        { itemName: 'GL inventory account balance', value: x.glInventoryBalance, ...meta('total') },
+        { itemName: x.difference === 0 ? 'Difference — reconciled ✓' : 'Difference (opening balances or manual journals to the inventory account)', value: x.difference, ...meta(x.difference === 0 ? 'total' : 'warn') },
+      ]),
+    ],
+  },
+  reorder: {
+    path: '/inventory/reorder',
+    columns: [t('itemCode', 'Item', 90), t('itemName', 'Description', 240), n('onHand', 'On Hand', 100), n('reorderLevel', 'Reorder Level', 110)],
+    rows: (xs: J[]) => xs.map((x) => ({ ...x, ...meta('warn') })),
+  },
+  warehouses: {
+    path: '/inventory/warehouses',
+    columns: [n('id', 'Id', 50), t('code', 'Code', 90), t('name', 'Warehouse', 260), t('active', 'Active', 60)],
+    rows: (xs: J[]) => xs.map((x) => ({ ...x, active: x.isActive ? 'Yes' : 'No' })),
+  },
+  boms: {
+    path: '/manufacturing/boms',
+    columns: [t('code', 'BOM / Component', 110), t('name', 'Name', 240), n('quantity', 'Qty', 70), t('outputItem', 'Produces', 180), m('conversionCost', 'Conversion / batch', 130), m('standardMaterialCost', 'Std Material', 120), m('standardUnitCost', 'Std Unit Cost', 120)],
+    rows: (xs: J[]) => xs.flatMap((b) => [
+      { id: b.id, code: b.code, name: b.name, quantity: b.outputQuantity, outputItem: b.outputItem, conversionCost: b.conversionCost, standardMaterialCost: b.standardMaterialCost, standardUnitCost: b.standardUnitCost, ...meta('group') },
+      ...b.lines.map((l: J) => ({ code: l.itemCode, name: l.itemName, quantity: l.quantity, ...meta(undefined, 1) })),
+    ]),
+  },
+  'production-orders': {
+    path: '/manufacturing/orders',
+    columns: [t('orderNo', 'Order No', 120), t('bom', 'BOM', 90), t('product', 'Product', 200), n('quantity', 'Qty', 70), d('plannedDate', 'Planned'), t('status', 'Status', 90), t('route', 'From → To', 110), m('materialCost', 'Material'), m('conversionCost', 'Conversion'), m('unitCost', 'Unit Cost'), t('voucherNo', 'GL Voucher', 120)],
+    rows: (xs: J[]) => xs.map((x) => ({ ...x, route: `${x.from ?? ''} → ${x.to ?? ''}`, ...(x.status === 'Cancelled' ? meta('muted') : {}) })),
+  },
+  requirements: {
+    path: '/manufacturing/requirements',
+    columns: [t('itemCode', 'Component', 100), t('itemName', 'Description', 240), t('warehouse', 'Warehouse', 90), n('required', 'Required', 100), n('onHand', 'On Hand', 100), n('shortage', 'Shortage', 100)],
+    rows: (xs: J[]) => xs.map((x) => ({ ...x, ...(x.shortage > 0 ? meta('warn') : {}) })),
+  },
+  jobs: {
+    path: '/jobs',
+    columns: [t('jobNo', 'Job No', 120), t('title', 'Title', 220), t('type', 'Type', 80), t('status', 'Status', 90), t('customer', 'Customer', 170), d('openedDate', 'Opened'), m('budget', 'Budget'), m('revenue', 'Revenue'), m('cost', 'Cost'), m('margin', 'Margin'), n('marginPct', 'Margin %', 80), n('budgetUsedPct', 'Budget Used %', 100)],
+    rows: (xs: J[]) => [...xs.map((x) => ({ ...x, ...(x.overBudget ? meta('warn') : x.status === 'Cancelled' ? meta('muted') : {}) })), total(xs, 'title', ['budget', 'revenue', 'cost', 'margin'])],
+  },
+  shipments: {
+    path: '/jobs',
+    columns: [t('jobNo', 'Shipment', 120), t('mode', 'Mode', 70), t('direction', 'Dir.', 70), t('origin', 'Origin', 90), t('destination', 'Destination', 100), t('carrier', 'Carrier', 120), t('awbBl', 'AWB / BL', 140), t('containerNo', 'Container', 120), n('packages', 'Pkgs', 60), n('weightKg', 'Weight kg', 90), d('etd', 'ETD'), d('eta', 'ETA'), t('status', 'Status', 90)],
+    rows: (xs: J[]) => xs.filter((x) => x.type === 'Shipment'),
+  },
+  vehicles: {
+    path: '/fleet/vehicles',
+    columns: [n('id', 'Id', 50), t('plateNo', 'Plate', 120), t('type', 'Type', 90), n('capacityKg', 'Capacity kg', 100), n('trips', 'Trips', 60), n('distanceKm', 'Km', 80), n('fuelLitres', 'Fuel L', 80), m('runningCost', 'Running Cost'), m('costPerKm', 'Cost / km', 90), n('kmPerLitre', 'Km / L', 70)],
+  },
+  trips: {
+    path: '/fleet/trips',
+    columns: [t('tripNo', 'Trip No', 120), d('date', 'Date'), t('vehicle', 'Vehicle', 110), t('job', 'Job', 120), t('driver', 'Driver', 110), t('from', 'From', 120), t('to', 'To', 120), n('distanceKm', 'Km', 70), m('fuelCost', 'Fuel', 90), m('tolls', 'Tolls', 80), m('otherCost', 'Other', 80), m('total', 'Total', 100), t('voucherNo', 'GL Voucher', 120)],
+    rows: withTotal('to', ['distanceKm', 'fuelCost', 'tolls', 'otherCost', 'total']),
+  },
+  fuel: {
+    path: '/fleet/vehicles',
+    columns: [t('plateNo', 'Vehicle', 120), n('distanceKm', 'Km', 90), n('fuelLitres', 'Fuel L', 90), n('kmPerLitre', 'Km / L', 80), m('runningCost', 'Running Cost', 120), m('costPerKm', 'Cost / km', 100)],
+    rows: withTotal('plateNo', ['distanceKm', 'fuelLitres', 'runningCost']),
+  },
   'leave-requests': {
     path: '/leave-requests', payroll: true,
     columns: [n('id', 'Req', 50), t('employee', 'Employee', 180), t('type', 'Type', 80), d('startDate', 'From'), d('endDate', 'To'), n('days', 'Days', 50), t('reason', 'Reason', 220), t('status', 'Status', 90), t('decisionBy', 'Decided By', 150)],

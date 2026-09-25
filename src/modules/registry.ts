@@ -8,6 +8,7 @@ import {
   Receipt, Coins, Package, Ruler, Tags, Boxes, Layers, UserPlus, Car, IdCard, Wallet, FileSpreadsheet, TrendingUp,
   ChartPie, Waves, ChartColumn, Percent, History, Building, CalendarDays, Network, Landmark, Calculator, Wand2,
   Split, ShieldCheck, UserCog, ScanLine, TriangleAlert, CircleUser,
+  Warehouse, Factory, Ship, Fuel, Briefcase, ClipboardCheck, Blocks, SlidersHorizontal, Route,
 } from 'lucide-react';
 import type { LedgerState } from '../engine/types';
 import {
@@ -35,6 +36,8 @@ export interface Screen {
   newForm?: FormKind;
   note?: string; // shown in the status bar — e.g. what's planned
   planned?: boolean;
+  /** Industry module the screen belongs to — its tab only shows when the company enables it. */
+  module?: 'inventory' | 'manufacturing' | 'jobs' | 'fleet';
 }
 
 export const TODAY = new Date().toISOString().slice(0, 10);
@@ -586,8 +589,39 @@ export const SCREENS: Screen[] = [
       { rule: 'Every AI answer logged', why: 'Mirrors C-ERP QueryLog entity for review/eval' },
     ],
   },
+
+  // ── INDUSTRY MODULES (ASCO-owned; enabled per company by industry profile) ──
+  {
+    id: 'industry-modules', label: 'Industry & Modules', tab: 'Settings', group: 'Company', icon: SlidersHorizontal, color: C.teal,
+    columns: [t('industry', 'Industry', 220), t('modules', 'Default modules', 260), t('description', 'What it adds', 460)],
+    rows: () => [
+      { industry: 'General / Services firm', modules: '—', description: 'Core accounting, AR/AP, payroll, reports' },
+      { industry: 'Trading & Distribution', modules: 'Inventory', description: 'Warehouses, weighted-average cost, COGS on invoicing, reorder alerts' },
+      { industry: 'Retail', modules: 'Inventory', description: 'Store stock, sell-through to COGS, counts & adjustments' },
+      { industry: 'Manufacturing', modules: 'Inventory + Manufacturing', description: 'BOMs, production orders, finished-goods costing' },
+      { industry: 'Logistics & Freight', modules: 'Jobs + Fleet', description: 'Shipment job files (AWB/BL, containers), per-job P&L, trucks & trips' },
+      { industry: 'Construction & Projects', modules: 'Jobs + Inventory', description: 'Project budgets vs actual cost, site materials' },
+      { industry: 'Professional & PRO services', modules: 'Jobs', description: 'Engagement profitability' },
+    ],
+    note: 'Pick the company\'s industry and map its GL accounts with Configure Industry (live mode, admins).',
+  },
+  { id: 'stock-on-hand', label: 'Stock on Hand', tab: 'Inventory', group: 'Stock', icon: Blocks, color: C.orange, module: 'inventory', columns: [t('x', 'Stock on Hand', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'stock-moves', label: 'Stock Movements', tab: 'Inventory', group: 'Stock', icon: ArrowLeftRight, color: C.blue, module: 'inventory', columns: [t('x', 'Stock Movements', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'stock-valuation', label: 'Valuation', tab: 'Inventory', group: 'Reports', icon: Scale, color: C.green, module: 'inventory', columns: [t('x', 'Valuation', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'reorder', label: 'Reorder Alerts', tab: 'Inventory', group: 'Reports', icon: TriangleAlert, color: C.red, module: 'inventory', columns: [t('x', 'Reorder', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'warehouses', label: 'Warehouses', tab: 'Inventory', group: 'Setup', icon: Warehouse, color: C.gray, module: 'inventory', columns: [t('x', 'Warehouses', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'boms', label: 'Bills of Materials', tab: 'Manufacturing', group: 'Engineering', icon: Layers, color: C.purple, module: 'manufacturing', columns: [t('x', 'BOMs', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'production-orders', label: 'Production Orders', tab: 'Manufacturing', group: 'Shop Floor', icon: Factory, color: C.orange, module: 'manufacturing', columns: [t('x', 'Production Orders', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'requirements', label: 'Material Requirements', tab: 'Manufacturing', group: 'Planning', icon: ClipboardCheck, color: C.teal, module: 'manufacturing', columns: [t('x', 'Requirements', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'jobs', label: 'Jobs', tab: 'Jobs', group: 'Jobs', icon: Briefcase, color: C.blue, module: 'jobs', columns: [t('x', 'Jobs', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'shipments', label: 'Shipment Tracker', tab: 'Jobs', group: 'Jobs', icon: Ship, color: C.teal, module: 'jobs', columns: [t('x', 'Shipments', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'vehicles', label: 'Vehicles', tab: 'Jobs', group: 'Fleet', icon: Truck, color: C.orange, module: 'fleet', columns: [t('x', 'Vehicles', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'trips', label: 'Trips', tab: 'Jobs', group: 'Fleet', icon: Route, color: C.green, module: 'fleet', columns: [t('x', 'Trips', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
+  { id: 'fuel', label: 'Fleet Costs', tab: 'Jobs', group: 'Fleet', icon: Fuel, color: C.red, module: 'fleet', columns: [t('x', 'Fleet costs', 500)], rows: () => [], note: 'Industry module — runs on the live API. Sign in, then enable it under Settings → Industry & Modules.' },
 ];
 
-export const TABS = ['Home', 'Finance', 'Receivables', 'Payables', 'Items', 'CRM & Assets', 'HR & Payroll', 'Reports', 'Settings', 'AI'];
+/** Base tab order; module tabs (Inventory / Manufacturing / Jobs) are filtered per company in the app. */
+export const TABS = ['Home', 'Finance', 'Receivables', 'Payables', 'Items', 'Inventory', 'Manufacturing', 'Jobs', 'CRM & Assets', 'HR & Payroll', 'Reports', 'Settings', 'AI'];
+export const MODULE_TABS: Record<string, 'inventory' | 'manufacturing' | 'jobs'> = { Inventory: 'inventory', Manufacturing: 'manufacturing', Jobs: 'jobs' };
 
 export const screenById = (id: string) => SCREENS.find((x) => x.id === id)!;

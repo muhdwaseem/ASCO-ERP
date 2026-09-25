@@ -7,6 +7,7 @@ using System.Threading.RateLimiting;
 using AegisErp.Infrastructure;
 using AegisErp.Infrastructure.Identity;
 using Asco.Api;
+using Asco.Api.Modules;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +70,8 @@ foreach (var d in builder.Services.Where(d => d.ImplementationType?.Name == "Inv
     builder.Services.Remove(d);
 
 builder.Services.AddScoped<CompanyScopeFilter>();
+builder.Services.AddScoped<EssScopeFilter>();
+builder.Services.AddAscoModules(builder.Configuration);
 
 // Brute-force protection on sign-in, per client IP.
 builder.Services.AddRateLimiter(o =>
@@ -84,6 +87,7 @@ builder.Services.AddProblemDetails();
 var app = builder.Build();
 
 await DatabaseStartup.RunAsync(app);
+await app.EnsureModuleTablesAsync();
 
 app.UseResponseCompression();
 app.UseExceptionHandler();
@@ -112,6 +116,7 @@ app.MapAuthEndpoints();
 app.MapReadEndpoints();
 app.MapWriteEndpoints();
 app.MapEssEndpoints();
+app.MapModuleEndpoints();
 
 app.Run();
 

@@ -1,0 +1,14 @@
+.ess { height: 100vh; display: grid; grid-template-rows: auto auto 1fr; }
+.ess-body { background: #fff; color: #1b1b1b; padding: 24px 28px; overflow: auto; }
+.ess-dl { display: grid; grid-template-columns: 180px 1fr; gap: 10px 20px; max-width: 720px; }
+.ess-dl dt { color: #666; }
+.ess-dl dd { margin: 0; font-weight: 600; }
+.ess-table { width: 100%; max-width: 980px; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+.ess-table th { text-align: left; background: #e7f2ea; border-bottom: 1px solid #9cc9ad; padding: 6px 8px; }
+.ess-table td { padding: 6px 8px; border-bottom: 1px solid #e6e6e6; }
+.ess-table .n { text-align: right; font-variant-numeric: tabular-nums; }
+.ess-table .muted { color: #888; }
+.ess-balance { margin: 0 0 12px; }
+.ess-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ess-form input, .ess-form select { height: 30px; border: 1px solid #b5b5b5; border-radius: 3px; padding: 0 8px; color: #1b1b1b; background: #fff; }
+.ess-ok { margin-top: 10px; color: #0c6a37; font-weight: 600; }

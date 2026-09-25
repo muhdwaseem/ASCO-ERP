@@ -363,10 +363,20 @@ export const SCREENS: Screen[] = [
     },
   },
   {
-    id: 'ess', label: 'Employee Portal', tab: 'HR & Payroll', group: 'Self-Service', icon: CircleUser, color: C.purple, planned: true,
-    columns: [t('feature', 'ESS Feature (C-ERP /ess)', 260), t('status', 'Status', 120)],
-    rows: () => ['Profile', 'Payslips', 'Leave requests', 'Salary advances', 'Assigned tasks'].map((f) => ({ feature: f, status: 'Phase 3' })),
-    note: 'Separate employee login + portal, ported in Phase 3.',
+    id: 'leave-requests', label: 'Leave Requests', tab: 'HR & Payroll', group: 'Self-Service', icon: CalendarDays, color: C.teal,
+    columns: [t('employee', 'Employee', 180), t('type', 'Type', 80), d('from', 'From'), d('to', 'To'), t('status', 'Status', 90)],
+    rows: () => [], note: 'Employees request leave in the portal; approve or reject the selected row from the ribbon (live mode).',
+  },
+  {
+    id: 'ess', label: 'Employee Portal', tab: 'HR & Payroll', group: 'Self-Service', icon: CircleUser, color: C.purple,
+    columns: [t('feature', 'Employee Self-Service', 260), t('status', 'How', 420)],
+    rows: () => [
+      { feature: 'Profile', status: 'Employee signs in with their own login (grant it from the Employees sheet → Portal Access)' },
+      { feature: 'Payslips', status: 'Every posted payroll run, with net pay and payment status' },
+      { feature: 'Leave requests', status: 'Request annual / sick / unpaid leave; see balance and decisions' },
+      { feature: 'Salary advances', status: 'Outstanding balance and monthly recovery' },
+    ],
+    note: 'Employee logins open the self-service portal instead of the workbook.',
   },
 
   // REPORTS

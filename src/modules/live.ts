@@ -263,4 +263,37 @@ export const LIVE: Record<string, LiveSpec> = {
     columns: [t('displayName', 'Name', 180), t('email', 'Email', 230), t('role', 'Role', 110), t('payroll', 'Payroll Access', 110)],
     rows: (xs: J[]) => xs.map((x) => ({ ...x, payroll: x.canAccessPayroll ? 'Yes' : 'No' })),
   },
+  'company-setup': {
+    path: '/company-profile',
+    columns: [t('field', 'Setting', 240), t('value', 'Value', 460)],
+    rows: (c: J) => [
+      ['Legal name', c.legalName], ['Trade name', c.tradeName], ['Company code', c.companyCode], ['Licence', [c.licenseNumber, c.licenseExpiryDate && `expires ${c.licenseExpiryDate}`].filter(Boolean).join(' · ')],
+      ['TRN', c.trnNumber], ['VAT registered', c.vatRegistered ? 'Yes' : 'No'], ['Address', [c.city, c.addressEmirate, c.poBox && `P.O. Box ${c.poBox}`, c.addressCountry].filter(Boolean).join(', ')],
+      ['Phone', c.phone], ['Base currency', c.baseCurrency], ['Financial year', [c.financialYearStart, c.financialYearEnd].filter(Boolean).join(' → ')],
+      ['Approval workflow', c.approvalWorkflowEnabled ? 'On' : 'Off'], ['PRO-Service mode', c.proServiceModeEnabled ? 'On' : 'Off'],
+      ['Primary bank', c.bank ? `${c.bank.bankName} · ${c.bank.accountName} · IBAN ${c.bank.iban ?? ''}` : '—'],
+    ].map(([field, value]) => ({ field, value: value ?? '—' })),
+  },
+  'commission-config': {
+    path: '/commission-config',
+    columns: [t('kind', 'Rule', 160), t('key', 'Applies To', 220), t('value', 'Rate / Range', 220), t('active', 'Active', 60)],
+    rows: (x: J) => [
+      { kind: 'CATEGORY BASE RATES', ...meta('group') },
+      ...x.categoryRates.map((r: J) => ({ kind: 'Category', key: `Category #${r.itemCategoryId}`, value: `${r.baseCommissionPercent}%`, active: r.isActive ? 'Yes' : 'No', ...meta(undefined, 1) })),
+      { kind: 'PROFIT SLABS', ...meta('group') },
+      ...x.profitSlabs.map((r: J) => ({ kind: 'Slab', key: `${r.grossProfitFrom} – ${r.grossProfitTo ?? '∞'}`, value: `+${r.commissionAdditionPercent}%`, active: r.isActive ? 'Yes' : 'No', ...meta(undefined, 1) })),
+      { kind: 'POSITION MULTIPLIERS', ...meta('group') },
+      ...x.positionRates.map((r: J) => ({ kind: 'Position', key: r.position, value: `× ${r.rateMultiplier}`, active: r.isActive ? 'Yes' : 'No', ...meta(undefined, 1) })),
+    ],
+  },
+  'custom-fields': {
+    path: '/custom-fields',
+    columns: [t('module', 'Entity', 120), t('label', 'Field', 220), t('fieldType', 'Type', 100), t('dropdownOptionsCsv', 'Options', 240), t('required', 'Required', 70), t('active', 'Active', 60)],
+    rows: (xs: J[]) => xs.map((x) => ({ ...x, required: x.isRequired ? 'Yes' : 'No', active: x.isActive ? 'Yes' : 'No' })),
+  },
+  'leave-requests': {
+    path: '/leave-requests', payroll: true,
+    columns: [n('id', 'Req', 50), t('employee', 'Employee', 180), t('type', 'Type', 80), d('startDate', 'From'), d('endDate', 'To'), n('days', 'Days', 50), t('reason', 'Reason', 220), t('status', 'Status', 90), t('decisionBy', 'Decided By', 150)],
+    rows: (xs: J[]) => xs.map((x) => ({ ...x, ...(x.status === 'Pending' ? meta('warn') : {}) })),
+  },
 };

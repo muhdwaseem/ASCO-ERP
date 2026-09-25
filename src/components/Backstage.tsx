@@ -29,7 +29,7 @@ export function Backstage({ onClose, onExport, live }: { onClose: () => void; on
               <dt>Data source</dt><dd>Live — ASCO API over the C-ERP accounting core</dd>
               <dt>Signed in as</dt><dd>{live.user}</dd>
               <dt>Your role</dt><dd>{live.role}</dd>
-              <dt>Posting</dt><dd>Read-only in this build (Phase 1). Creating and posting documents arrives in Phase 2.</dd>
+              <dt>Posting</dt><dd>Documents post through C-ERP's engine (same numbering, VAT, approvals and period locks as C-ERP), limited by your role in this company.</dd>
             </dl>
           </>
         ) : page === 'info' ? (
@@ -47,7 +47,7 @@ export function Backstage({ onClose, onExport, live }: { onClose: () => void; on
         ) : (
           <>
             <h1>ASCO</h1>
-            <p>ASCO — Excel-style accounting software covering the full C-ERP module set. This build runs a TypeScript port of the posting engine in the browser with demo data; Signed in, it reads live books through the ASCO API (ASP.NET Core over C-ERP's accounting core + PostgreSQL); demo mode runs a TypeScript port of the posting engine in the browser. See <code>docs/STACK-AND-PLAN.md</code>.</p>
+            <p>ASCO — Excel-style accounting software covering the full C-ERP module set. Signed in, it reads and posts live books through the ASCO API (ASP.NET Core over C-ERP's accounting core + PostgreSQL); demo mode runs a TypeScript port of the posting engine in the browser. See <code>docs/STACK-AND-PLAN.md</code>.</p>
           </>
         )}
       </section>

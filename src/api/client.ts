@@ -5,7 +5,7 @@ export interface CompanyGrant {
   id: number; code: string; name: string; role: string;
   canPost: boolean; canAdminister: boolean; canAccessPayroll: boolean; subscription: string;
 }
-export interface Me { email: string; displayName: string; isFirmAdmin: boolean; companies: CompanyGrant[] }
+export interface Me { email: string; displayName: string; isFirmAdmin: boolean; companies: CompanyGrant[]; employee?: { employeeCode: string; fullName: string } | null }
 
 export class ApiError extends Error {
   status: number;

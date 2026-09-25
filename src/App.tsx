@@ -36,6 +36,7 @@ export default function App() {
   const [zoom, setZoom] = useState(100);
   const [form, setForm] = useState<FormKind | null>(null);
   const [liveForm, setLiveForm] = useState<LiveFormKind | null>(null);
+  const [formContext, setFormContext] = useState<{ employeeId: number; name?: string } | undefined>(undefined);
   const [printing, setPrinting] = useState<{ kind: PrintKind; id: number } | null>(null);
   const [backstage, setBackstage] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -264,6 +265,20 @@ export default function App() {
         unpaid.forEach((r) => markPayrollPaid(store.get(), r.no, r.runDate, USER));
         return `Paid ${unpaid.length} payroll run(s) via WPS transfer`;
       }) },
+    ] }, { group: 'People', actions: [
+      { label: 'Approve Leave', icon: BadgeCheck, color: C.green, small: true, needs: 'payroll', run: () => {
+        if (active !== 'leave-requests' || !activeId) return notify('Select a request on the Leave Requests sheet first', 'err');
+        liveRun(async () => { await api.post(`/leave-requests/${activeId}/decide`, { approved: true }, cid); return `Leave request #${activeId} approved`; });
+      } },
+      { label: 'Reject Leave', icon: X, color: C.red, small: true, needs: 'payroll', run: () => {
+        if (active !== 'leave-requests' || !activeId) return notify('Select a request on the Leave Requests sheet first', 'err');
+        liveRun(async () => { await api.post(`/leave-requests/${activeId}/decide`, { approved: false }, cid); return `Leave request #${activeId} rejected`; });
+      } },
+      { label: 'Portal Access', icon: UserPlus, color: C.purple, small: true, needs: 'admin', run: () => {
+        if (active !== 'employees' || !activeId) return notify('Select an employee row on the Employees sheet first', 'err');
+        setFormContext({ employeeId: activeId, name: String(activeRow?.fullName ?? '') });
+        setLiveForm('portal-access');
+      } },
     ] }, { group: 'Documents', actions: [
       { label: 'Payslips', icon: Printer, color: C.gray, small: true, needs: 'live', run: () => printSelected('payslips', 'payroll', 'payroll run') },
       { label: 'WPS File', icon: FileDown, color: C.gray, small: true, needs: 'payroll', run: () => {
@@ -310,7 +325,7 @@ export default function App() {
     if (n === 'admin' && !grant?.canAdminister) return 'Needs company administrator access';
     return null;
   };
-  const liveOnly = (label: string) => !live && /^(New Customer|New Vendor|Send Reminder|WPS File)$/.test(label);
+  const liveOnly = (label: string) => !live && /^(New Customer|New Vendor|Send Reminder|WPS File|Approve Leave|Reject Leave|Portal Access)$/.test(label);
   const ribbonExtra = (extra[tab] ?? []).map((g) => ({
     ...g,
     actions: g.actions.map((a) => {
@@ -435,7 +450,7 @@ export default function App() {
         const target: Record<FormKind, string> = { 'sales-invoice': 'sales-invoices', 'purchase-invoice': 'purchase-invoices', receipt: 'receipts', payment: 'payments', expense: 'expenses' };
         setForm(null); openSheet(target[form]); notify(msg);
       }} />}
-      {liveForm && <LiveDocForm kind={liveForm} companyId={cid} onClose={() => setLiveForm(null)} onDone={(msg) => { const t = LIVE_TARGET[liveForm]; setLiveForm(null); openSheet(t); notify(msg); }} />}
+      {liveForm && <LiveDocForm kind={liveForm} companyId={cid} context={formContext} onClose={() => setLiveForm(null)} onDone={(msg) => { const t = LIVE_TARGET[liveForm]; setLiveForm(null); openSheet(t); notify(msg); }} />}
       {printing && <PrintDoc kind={printing.kind} id={printing.id} companyId={cid} onClose={() => setPrinting(null)} />}
       {backstage && <Backstage live={live ? { company: companyName, role: grant?.role ?? '', user: sess.me!.email } : undefined} onClose={() => setBackstage(false)} onExport={toCsv} />}
     </div>

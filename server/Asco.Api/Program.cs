@@ -111,6 +111,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" })); // load-balancer
 app.MapAuthEndpoints();
 app.MapReadEndpoints();
 app.MapWriteEndpoints();
+app.MapEssEndpoints();
 
 app.Run();
 

@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import './App.css'
 import './print.css'
+import './ess.css'
+import { EssPortal } from './components/EssPortal.tsx'
 import App from './App.tsx'
 import { SignIn } from './components/SignIn.tsx'
 import { sessionActions, useSession } from './api/client.ts'
@@ -23,6 +25,7 @@ function Root() {
   }, [])
 
   if (checking) return <div className="splash"><div className="start-logo">A</div><span>ASCO</span></div>
+  if (s.mode === 'live' && s.me?.employee && s.me.companies.length === 0) return <EssPortal />
   if (s.mode === 'demo' || (s.mode === 'live' && s.companyId)) return <App key={`${s.mode}-${s.companyId}`} />
   return <SignIn />
 }

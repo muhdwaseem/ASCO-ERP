@@ -5,15 +5,15 @@ import { X } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, vatFraction, type Lookups } from '../api/client';
 
-export type LiveFormKind = 'sales-invoice' | 'purchase-invoice' | 'receipt' | 'payment' | 'expense' | 'customer' | 'vendor';
+export type LiveFormKind = 'sales-invoice' | 'purchase-invoice' | 'receipt' | 'payment' | 'expense' | 'customer' | 'vendor' | 'portal-access';
 
 const TITLES: Record<LiveFormKind, string> = {
   'sales-invoice': 'New Sales Invoice', 'purchase-invoice': 'New Purchase Invoice', receipt: 'New Receipt Voucher',
-  payment: 'New Payment Voucher', expense: 'New Expense', customer: 'New Customer', vendor: 'New Vendor',
+  payment: 'New Payment Voucher', expense: 'New Expense', customer: 'New Customer', vendor: 'New Vendor', 'portal-access': 'Grant Employee Portal Access',
 };
 export const LIVE_TARGET: Record<LiveFormKind, string> = {
   'sales-invoice': 'sales-invoices', 'purchase-invoice': 'purchase-invoices', receipt: 'receipts', payment: 'payments',
-  expense: 'expenses', customer: 'customers', vendor: 'vendors',
+  expense: 'expenses', customer: 'customers', vendor: 'vendors', 'portal-access': 'employees',
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -24,13 +24,15 @@ export function useLookups(companyId: number) {
   return useQuery({ queryKey: ['lookups', companyId], queryFn: () => api.get<Lookups>('/lookups', companyId), staleTime: 60_000 });
 }
 
-export function LiveDocForm({ kind, companyId, onClose, onDone }: { kind: LiveFormKind; companyId: number; onClose: () => void; onDone: (msg: string) => void }) {
+export function LiveDocForm({ kind, companyId, onClose, onDone, context }: { kind: LiveFormKind; companyId: number; onClose: () => void; onDone: (msg: string) => void; context?: { employeeId: number; name?: string } }) {
   const qc = useQueryClient();
   const lk = useLookups(companyId);
   const L = lk.data;
   const sales = kind === 'sales-invoice' || kind === 'receipt';
   const settlement = kind === 'receipt' || kind === 'payment';
   const master = kind === 'customer' || kind === 'vendor';
+  const portal = kind === 'portal-access';
+  const [login, setLogin] = useState({ email: '', password: '' });
 
   const [party, setParty] = useState('');
   const [date, setDate] = useState(today());
@@ -92,6 +94,14 @@ export function LiveDocForm({ kind, companyId, onClose, onDone }: { kind: LiveFo
     try {
       const n = (v: string) => Number(v) || 0;
       let res: { number?: string; code?: string; name?: string } = {};
+      if (portal) {
+        if (!context) throw new Error('Select an employee row first.');
+        if (login.password.length < 8) throw new Error('Password must be at least 8 characters.');
+        const r = await api.post<{ userWasCreated: boolean; email: string }>(`/employees/${context.employeeId}/portal-access`, login, companyId);
+        await qc.invalidateQueries();
+        onDone(`Portal access ${r.userWasCreated ? 'created' : 'linked'} for ${r.email}`);
+        return;
+      }
       if (kind === 'customer' || kind === 'vendor') {
         if (!m.name.trim()) throw new Error('Name is required.');
         res = await api.post(`/${kind}s`, { name: m.name, group: m.group || null, currency: m.currency, creditLimit: n(m.creditLimit), paymentTermsDays: n(m.terms), trn: m.trn || null, email: m.email || null, phone: m.phone || null, address: m.address || null }, companyId);
@@ -127,7 +137,15 @@ export function LiveDocForm({ kind, companyId, onClose, onDone }: { kind: LiveFo
       <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-title"><span>{TITLES[kind]}</span><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={16} /></button></div>
         <div className="modal-body">
-          {!L ? <div className="muted">{lk.isError ? lk.error.message : 'Loading lists…'}</div> : master ? (
+          {portal ? (
+            <>
+              <p className="muted">{context?.name ?? 'The selected employee'} will be able to sign in and see only their own payslips, leave and salary advances.</p>
+              <div className="form-row">
+                <label>Login email <input type="email" value={login.email} onChange={(e) => setLogin({ ...login, email: e.target.value })} autoFocus /></label>
+                <label>Initial password <input type="password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} /></label>
+              </div>
+            </>
+          ) : !L ? <div className="muted">{lk.isError ? lk.error.message : 'Loading lists…'}</div> : master ? (
             <>
               <div className="form-row">
                 <label>Name <input value={m.name} onChange={(e) => setM({ ...m, name: e.target.value })} autoFocus /></label>
@@ -214,7 +232,7 @@ export function LiveDocForm({ kind, companyId, onClose, onDone }: { kind: LiveFo
         <div className="modal-foot">
           <span className="muted">{master ? 'Saved to the live company.' : 'Posted by C-ERP’s engine: document + balanced GL voucher, one number.'}</span>
           <button className="btn ghost" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit} disabled={busy || !L}>{busy ? 'Saving…' : master ? 'Save' : 'Save & Post'}</button>
+          <button className="btn primary" onClick={submit} disabled={busy || (!L && !portal)}>{busy ? 'Saving…' : master || portal ? 'Save' : 'Save & Post'}</button>
         </div>
       </div>
     </div>

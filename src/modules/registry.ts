@@ -30,7 +30,7 @@ export interface Screen {
   group: string;
   icon: LucideIcon;
   color: string;
-  kind?: 'sheet' | 'journal-entry' | 'ai' | 'scan';
+  kind?: 'sheet' | 'journal-entry' | 'ai' | 'scan' | 'invoice-entry' | 'receipt-batch';
   columns?: Col[];
   rows?: (s: LedgerState) => Row[];
   newForm?: FormKind;
@@ -195,6 +195,14 @@ export const SCREENS: Screen[] = [
       });
       return [...rows, totalRow(rows, 'Total', 'customer', ['net', 'vat', 'gross', 'outstanding'], 'grand')];
     },
+  },
+  {
+    id: 'invoice-entry', label: 'Invoice Entry', tab: 'Receivables', group: 'Fast Entry', icon: FileSpreadsheet, color: C.green, kind: 'invoice-entry',
+    note: 'Type the invoice straight into the cells: customer in the strip, lines in the grid, Ctrl+Enter to post (live mode).',
+  },
+  {
+    id: 'receipt-batch', label: 'Receipt Batch', tab: 'Receivables', group: 'Fast Entry', icon: ListChecks, color: C.green, kind: 'receipt-batch',
+    note: 'One receipt per row; Post all posts every ready row (live mode).',
   },
   {
     id: 'recurring-invoices', label: 'Recurring Invoices', tab: 'Receivables', group: 'Sales', icon: Repeat, color: C.teal,

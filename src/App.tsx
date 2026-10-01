@@ -17,6 +17,10 @@ import { Ribbon, type ActionGroup } from './components/Ribbon';
 import { JE_COLUMNS, jeEditable, jeEdit, jeRows, JeHeader, postDraft, postDraftLive, demoResolver, useJeDraft, type AccountResolver } from './components/JournalEntry';
 import { LiveDocForm, LIVE_TARGET, type LiveFormKind, type LivePrefill } from './components/LiveDocForm';
 import { PrintDoc, type PrintKind } from './components/PrintDoc';
+import {
+  invoiceDraft, invoiceView, InvoiceEntryHeader, postInvoice,
+  receiptBatch, receiptView, ReceiptBatchHeader, postReceiptBatch, setReceiptDefaultDate, type OpenInvoice,
+} from './components/EntrySheets';
 import { DocForm } from './components/DocForm';
 import { AiPanel } from './components/AiPanel';
 import { ScanBill } from './components/ScanBill';
@@ -30,6 +34,8 @@ const monthEnd = (d = new Date()) => new Date(Date.UTC(d.getFullYear(), d.getMon
 export default function App() {
   const s = useLedger();
   const draft = useJeDraft();
+  const invDraft = invoiceDraft.useValue();
+  const rcptRows = receiptBatch.useValue();
   const [open, setOpen] = useState<string[]>(['dashboard', 'chart-of-accounts', 'sales-invoices', 'trial-balance']);
   const [active, setActive] = useState('dashboard');
   const [tab, setTab] = useState('Home');
@@ -70,6 +76,20 @@ export default function App() {
   const visibleTabs = TABS.filter((t) => !MODULE_TABS[t] || enabledModules.includes(MODULE_TABS[t]));
   const tabLabel = (t: string) => (t === 'Jobs' ? (profile.data?.industry === 'Logistics' ? 'Logistics' : profile.data?.industry === 'Construction' ? 'Projects' : 'Jobs') : t);
   const lookups = useQuery({ queryKey: ['lookups', sess.companyId], queryFn: () => api.get<Lookups>('/lookups', sess.companyId!), enabled: live, staleTime: 60_000 });
+  // Default entry date: today if its period is open, else the nearest open period.
+  const entryDate = useMemo(() => {
+    const t0 = new Date().toISOString().slice(0, 10);
+    const open = lookups.data?.openPeriods ?? [];
+    if (!open.length || open.some((p) => t0 >= p.startDate && t0 <= p.endDate)) return t0;
+    const last = open[open.length - 1];
+    return last.endDate < t0 ? last.endDate : last.startDate;
+  }, [lookups.data]);
+  useEffect(() => setReceiptDefaultDate(entryDate), [entryDate]);
+  const openInvoices = useQuery({
+    queryKey: ['sheet', sess.companyId, '/outstanding-invoices'],
+    queryFn: () => api.get<OpenInvoice[]>('/outstanding-invoices', sess.companyId!),
+    enabled: live && active === 'receipt-batch',
+  });
   const resolver: AccountResolver = useMemo(() => {
     if (!live) return demoResolver(s);
     const byCode = new Map((lookups.data?.accounts ?? []).map((a) => [a.code, a]));
@@ -100,6 +120,10 @@ export default function App() {
 
   // ---------- view model for the active sheet
   const view = useMemo(() => {
+    if (screen.kind === 'invoice-entry' || screen.kind === 'receipt-batch') {
+      if (!live) return { columns: [{ key: 'msg', label: screen.label, width: 620 }] as Col[], rows: [{ msg: 'Sign in to a live company to use fast entry — it posts straight to the books.', _meta: { style: 'muted' } }] as Row[] };
+      return screen.kind === 'invoice-entry' ? invoiceView(lookups.data, invDraft) : receiptView(lookups.data, openInvoices.data, rcptRows);
+    }
     if (screen.kind === 'journal-entry') return { columns: JE_COLUMNS, rows: jeRows(resolver, draft), editable: jeEditable, onEdit: jeEdit };
     if (screen.kind === 'ai' || (live && screen.kind === 'scan')) return { columns: [] as Col[], rows: [] as Row[] };
     const notice = (msg: string, style: RowMeta['style'] = 'muted') => ({ columns: [{ key: 'msg', label: screen.label, width: 620 }] as Col[], rows: [{ msg, _meta: { style } }] as Row[] });
@@ -135,7 +159,7 @@ export default function App() {
       rows = [...body, ...tail];
     }
     return { columns, rows };
-  }, [screen, s, draft, filter, sorts, active, live, spec, blocked, liveQuery.data, liveQuery.status, liveQuery.error, sess.me, resolver]);
+  }, [screen, s, draft, filter, sorts, active, live, spec, blocked, liveQuery.data, liveQuery.status, liveQuery.error, sess.me, resolver, invDraft, rcptRows, lookups.data, openInvoices.data]);
 
   // ---------- selection stats (Excel status bar)
   const stats = useMemo(() => {
@@ -197,6 +221,16 @@ export default function App() {
     if (active !== 'journal-voucher') { openSheet('journal-voucher'); return; }
     if (!live) { const r = postDraft(USER); notify(r.msg, r.ok ? 'ok' : 'err'); return; }
     postDraftLive(resolver, sess.companyId!, asDraft).then((r) => { notify(r.msg, r.ok ? 'ok' : 'err'); if (r.ok) qc.invalidateQueries(); });
+  };
+  /** Posts the fast-entry sheet in view (invoice: post or draft; receipts: every ready row). */
+  const postEntry = async (asDraft: boolean) => {
+    if (!grant?.canPost) { notify('Your role in this company is read-only', 'err'); return; }
+    notify(active === 'receipt-batch' ? 'Posting receipts…' : 'Posting invoice…');
+    const r = active === 'receipt-batch'
+      ? await postReceiptBatch(lookups.data, openInvoices.data, sess.companyId!)
+      : await postInvoice(lookups.data, sess.companyId!, entryDate, asDraft);
+    notify(r.msg, r.ok ? 'ok' : 'err');
+    if (r.msg.startsWith('Posted') || r.msg.startsWith('Saved')) qc.invalidateQueries();
   };
   /** Live command: runs against the API, reports the outcome in the status bar, refreshes every sheet. */
   const liveRun = async (fn: () => Promise<string>) => {
@@ -375,6 +409,7 @@ export default function App() {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 'Enter' && active === 'journal-voucher') { e.preventDefault(); postJv(); }
+      if (e.ctrlKey && e.key === 'Enter' && live && (active === 'invoice-entry' || active === 'receipt-batch')) { e.preventDefault(); postEntry(false); }
       if (e.altKey && (e.key === 'q' || e.key === 'Q')) { e.preventDefault(); document.getElementById('tellme')?.focus(); }
     };
     window.addEventListener('keydown', k);
@@ -481,13 +516,15 @@ export default function App() {
       </div>
 
       <main className="sheet">
+        {live && screen.kind === 'invoice-entry' && <InvoiceEntryHeader L={lookups.data} defaultDate={entryDate} onPost={(d) => postEntry(d)} />}
+        {live && screen.kind === 'receipt-batch' && <ReceiptBatchHeader ready={Number('ready' in view ? view.ready : 0) || 0} onPostAll={() => postEntry(false)} />}
         {screen.kind === 'journal-entry' && <JeHeader onPost={() => postJv()} onDraft={live ? () => postJv(true) : undefined} hint={live ? 'Type account codes from the Chart of Accounts sheet · Post, or save a draft for approval' : undefined} />}
         {screen.kind === 'ai' ? (
           <AiPanel companyId={live ? cid : undefined} />
         ) : live && screen.kind === 'scan' ? (
           <ScanBill companyId={cid} onUse={(p) => { setPrefill(p); setLiveForm('purchase-invoice'); }} />
         ) : (
-          <Grid columns={view.columns} rows={view.rows} sel={sel} onSel={setSel} zoom={zoom} editable={view.editable} onEdit={view.onEdit} />
+          <Grid columns={view.columns} rows={view.rows} sel={sel} onSel={setSel} zoom={zoom} editable={view.editable} onEdit={view.onEdit} optionsFor={'optionsFor' in view ? view.optionsFor : undefined} />
         )}
       </main>
 

@@ -6,6 +6,20 @@
 .form-grid .checks input { height: auto; }
 .modal .muted { color: #6b6b6b; font-size: 12px; }
 
+/* in-cell search suggestions (entry sheets) */
+.grid td.editing { overflow: visible; position: relative; z-index: 5; }
+.cell-suggest { position: absolute; left: -2px; top: 100%; min-width: 100%; width: max-content; max-width: 420px; background: #fff; border: 1px solid #107c41; box-shadow: 0 6px 18px rgba(0,0,0,.18); z-index: 20; font-size: 13px; }
+.cell-suggest div { padding: 4px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b1b1b; }
+.cell-suggest div:hover, .cell-suggest div.on { background: #e7f2ea; }
+.entry-header { display: flex; align-items: flex-end; gap: 12px; padding: 8px 12px; background: #f3f8f5; border-bottom: 1px solid #cfe3d6; color: #1b1b1b; flex-wrap: wrap; }
+.entry-header label { display: flex; flex-direction: column; gap: 3px; font-weight: 600; font-size: 12px; }
+.entry-header input, .entry-header select { height: 28px; border: 1px solid #b9c9be; border-radius: 3px; padding: 0 8px; background: #fff; font-weight: 400; color: #1b1b1b; }
+.entry-header .grow { flex: 1; min-width: 220px; }
+.entry-header .grow input { width: 100%; }
+.entry-header .hint { color: #5f6f64; font-size: 12px; align-self: center; }
+.entry-header .btn { height: 28px; }
+.entry-header .picked { font-size: 11px; color: #0c6a37; font-weight: 400; }
+
 /* AI */
 .ai-meta { font-size: 11px; color: #7a7a7a; margin-top: 4px; }
 .ai-a.err { background: var(--warn-fill); color: #9b1c12; }

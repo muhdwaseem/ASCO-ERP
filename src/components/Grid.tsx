@@ -29,14 +29,21 @@ interface Props {
   zoom: number;
   editable?: (r: number, c: number) => boolean; // r = data row index (0-based), c = column index
   onEdit?: (r: number, c: number, value: string) => void;
+  /** Search-as-you-type choices for a cell (customers, items, accounts…). r = data row index. */
+  optionsFor?: (r: number, c: number) => string[] | undefined;
 }
 
 const MIN_ROWS = 60;
 
-export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit }: Props) {
+export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, optionsFor }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const [edit, setEdit] = useState<{ r: number; c: number; value: string } | null>(null);
+  const [hi, setHi] = useState(-1); // highlighted suggestion
+  const options = edit ? optionsFor?.(edit.r - 1, edit.c) : undefined;
+  const matches = options
+    ? options.filter((o) => o.toLowerCase().includes(edit!.value.trim().toLowerCase())).slice(0, 8)
+    : [];
   const totalRows = Math.max(MIN_ROWS, rows.length + 20);
   const totalCols = Math.max(columns.length + 8, 20);
 
@@ -62,19 +69,33 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit }: Prop
 
   // After a key-commit the input unmounts and blurs; ignore that second (stale) commit.
   const committed = useRef(false);
-  const commit = (dr = 0, dc = 0) => {
+  const commit = (dr = 0, dc = 0, value?: string) => {
     if (committed.current) return;
     committed.current = true;
-    if (edit) onEdit?.(edit.r - 1, edit.c, edit.value);
+    if (edit) onEdit?.(edit.r - 1, edit.c, value ?? edit.value);
     setEdit(null);
+    setHi(-1);
     if (dc && edit) {
-      // Tab in an entry sheet jumps to the next editable column (skips computed ones)
+      // Tab in an entry sheet jumps to the next editable column (skips computed ones);
+      // past the last one it wraps to the first editable cell of the next row.
       let c = edit.c + dc;
       while (c >= 0 && c < columns.length && !canEdit(edit.r, c)) c += dc;
       if (c >= 0 && c < columns.length) onSel({ r: edit.r, c, r2: edit.r, c2: c });
+      else if (dc > 0) {
+        const first = columns.findIndex((_, i) => canEdit(edit.r + 1, i));
+        if (first >= 0) onSel({ r: edit.r + 1, c: first, r2: edit.r + 1, c2: first });
+      }
     } else if (dr) move(dr, 0, false);
   };
-  const startEdit = (r: number, c: number, value: string) => { committed.current = false; setEdit({ r, c, value }); };
+  /** Commit, completing the text to the highlighted (or first) suggestion like Excel's autocomplete. */
+  const commitPick = (dr: number, dc: number) => {
+    if (!edit) return;
+    const typed = edit.value.trim();
+    const exact = options?.some((o) => o === typed);
+    const pick = typed && matches.length && !exact ? matches[hi >= 0 ? hi : 0] : hi >= 0 ? matches[hi] : undefined;
+    commit(dr, dc, pick);
+  };
+  const startEdit = (r: number, c: number, value: string) => { committed.current = false; setHi(-1); setEdit({ r, c, value }); };
 
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (edit) return;
@@ -155,24 +176,35 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit }: Prop
                     <td
                       key={c}
                       data-cell={`${r}-${c}`}
-                      className={[inSel && !active ? 'sel' : '', active ? 'active' : '', num ? 'num' : '', neg ? 'neg' : '', ed ? 'editable' : '', c <= 1 && !num && m?.indent ? `ind-${m.indent}` : ''].join(' ')}
+                      className={[isEditing ? 'editing' : '', inSel && !active ? 'sel' : '', active ? 'active' : '', num ? 'num' : '', neg ? 'neg' : '', ed ? 'editable' : '', c <= 1 && !num && m?.indent ? `ind-${m.indent}` : ''].join(' ')}
                       onMouseDown={(e) => { e.preventDefault(); down(r, c, e.shiftKey); }}
                       onMouseEnter={() => dragging.current && onSel({ ...sel, r2: r, c2: c })}
                       onDoubleClick={() => ed && startEdit(r, c, String(raw ?? ''))}
                     >
                       {isEditing ? (
-                        <input
-                          autoFocus
-                          className="cell-input"
-                          value={edit.value}
-                          onChange={(e) => setEdit({ ...edit, value: e.target.value })}
-                          onBlur={() => commit()}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') { e.preventDefault(); commit(1, 0); wrap.current?.focus(); }
-                            else if (e.key === 'Tab') { e.preventDefault(); commit(0, e.shiftKey ? -1 : 1); wrap.current?.focus(); }
-                            else if (e.key === 'Escape') { committed.current = true; setEdit(null); wrap.current?.focus(); }
-                          }}
-                        />
+                        <>
+                          <input
+                            autoFocus
+                            className="cell-input"
+                            value={edit.value}
+                            onChange={(e) => { setEdit({ ...edit, value: e.target.value }); setHi(-1); }}
+                            onBlur={() => commitPick(0, 0)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'ArrowDown' && matches.length) { e.preventDefault(); setHi((h) => Math.min(matches.length - 1, h + 1)); }
+                              else if (e.key === 'ArrowUp' && matches.length) { e.preventDefault(); setHi((h) => Math.max(-1, h - 1)); }
+                              else if (e.key === 'Enter') { e.preventDefault(); commitPick(1, 0); wrap.current?.focus(); }
+                              else if (e.key === 'Tab') { e.preventDefault(); commitPick(0, e.shiftKey ? -1 : 1); wrap.current?.focus(); }
+                              else if (e.key === 'Escape') { committed.current = true; setEdit(null); setHi(-1); wrap.current?.focus(); }
+                            }}
+                          />
+                          {matches.length > 0 && (
+                            <div className="cell-suggest" onMouseDown={(e) => e.preventDefault()}>
+                              {matches.map((m, i) => (
+                                <div key={m} className={i === hi ? 'on' : ''} onMouseDown={(e) => { e.preventDefault(); commit(0, 0, m); wrap.current?.focus(); }}>{m}</div>
+                              ))}
+                            </div>
+                          )}
+                        </>
                       ) : (
                         r === 0 ? raw : fmt(col, raw)
                       )}

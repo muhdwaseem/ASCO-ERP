@@ -31,6 +31,8 @@ function MenuLevel({ items, level, path, setPath, close }: { items: MenuItem[]; 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || level === 0) return;
+    el.style.top = ''; el.style.left = ''; el.style.right = '';
+    if (window.matchMedia('(max-width: 760px)').matches) return; // phones: CSS opens it inline
     el.style.top = '-4px'; el.style.left = '100%'; el.style.right = 'auto';
     const r = el.getBoundingClientRect();
     const over = r.bottom - window.innerHeight + 8;
@@ -45,7 +47,7 @@ function MenuLevel({ items, level, path, setPath, close }: { items: MenuItem[]; 
         return (
           <div key={it.label} role="menuitem" aria-haspopup={!!it.items} className={`rb-mi${on ? ' on' : ''}${level === 0 ? ' top' : ''}`}
             onMouseEnter={() => setPath([...path.slice(0, level), i])}
-            onClick={(e) => { e.stopPropagation(); if (it.items) setPath([...path.slice(0, level), i, 0]); else { it.run?.(); close(); } }}>
+            onClick={(e) => { e.stopPropagation(); if (it.items) setPath([...path.slice(0, level), i]); else { it.run?.(); close(); } }}>
             <span className="rb-mi-icon">{Icon && <Icon size={level === 0 ? 20 : 16} strokeWidth={1.7} color={it.color} />}</span>
             <span className="rb-mi-label">{it.label}</span>
             {it.items && <ChevronRight size={14} className="rb-mi-arrow" />}

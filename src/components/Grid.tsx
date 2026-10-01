@@ -38,6 +38,9 @@ const MIN_ROWS = 60;
 export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, optionsFor }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  // Touch screens have no keys to start typing: tapping the already-selected cell opens it (and the phone keyboard).
+  const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+  const tappedActive = useRef(false);
   const [edit, setEdit] = useState<{ r: number; c: number; value: string } | null>(null);
   const [hi, setHi] = useState(-1); // highlighted suggestion
   const options = edit ? optionsFor?.(edit.r - 1, edit.c) : undefined;
@@ -124,6 +127,7 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
   };
 
   const down = (r: number, c: number, shift: boolean) => {
+    tappedActive.current = !shift && r === sel.r && c === sel.c && r === sel.r2 && c === sel.c2;
     if (edit) commit();
     wrap.current?.focus({ preventScroll: true }); // mousedown is preventDefault'ed, so take focus explicitly
     dragging.current = true;
@@ -180,6 +184,7 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
                       onMouseDown={(e) => { e.preventDefault(); down(r, c, e.shiftKey); }}
                       onMouseEnter={() => dragging.current && onSel({ ...sel, r2: r, c2: c })}
                       onDoubleClick={() => ed && startEdit(r, c, String(raw ?? ''))}
+                      onClick={() => { if (coarse && ed && !isEditing && tappedActive.current) startEdit(r, c, String(raw ?? '')); }}
                     >
                       {isEditing ? (
                         <>

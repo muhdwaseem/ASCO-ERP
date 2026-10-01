@@ -83,7 +83,7 @@
 
 /* sheet area */
 .sheet { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--sheet-bg); }
-.grid-wrap { flex: 1; overflow: auto; outline: none; color: var(--sheet-text); font-family: var(--grid-font); }
+.grid-wrap { flex: 1; overflow: auto; outline: none; color: var(--sheet-text); font-family: var(--grid-font); scroll-padding: 24px 0 0 44px; -webkit-overflow-scrolling: touch; }
 .grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 .grid td, .grid th { height: 1.45em; padding: 0 5px; border-right: 1px solid var(--sheet-line); border-bottom: 1px solid var(--sheet-line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; }
 .grid thead th { position: sticky; top: 0; z-index: 3; background: var(--sheet-head); border-color: #c8c8c8; font-weight: 400; color: #444; text-align: center; font-family: 'Segoe UI', sans-serif; font-size: .85em; height: 22px; cursor: s-resize; }
@@ -209,6 +209,18 @@
   .tb-user { display: none; }
   .namebox { width: 70px; }
   .sb-views, .statusbar input[type=range] { display: none; }
+  /* phones: give the sheet the room, keep every control reachable by swiping */
+  .tellme { display: none; }
+  .tb-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .ribbon { height: 88px; padding-right: 26px; }
+  .rb-big { width: 60px; min-height: 64px; font-size: 11px; }
+  .rb-big svg { width: 24px; height: 24px; }
+  .qat-crumb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .entry-header { padding: 6px 10px; gap: 8px; }
+  .entry-header .hint, .report-dates .hint { display: none; }
+  .entry-header .grow { min-width: 0; flex-basis: 100%; }
+  /* 16px stops iOS zooming into every field */
+  .entry-header input, .entry-header select, .cell-input, .combo input, .modal input, .modal select, .modal textarea { font-size: 16px; }
 }
 
 @media print {
@@ -263,3 +275,13 @@
 .rb-mi-icon { width: 26px; display: inline-flex; justify-content: center; flex: none; }
 .rb-mi-label { flex: 1; }
 .rb-mi-arrow { position: absolute; right: 8px; color: var(--chrome-dim); }
+
+/* Phones: the Reports menu's fly-outs open inline under their item instead of off the side of the
+   screen (kept after the menu rules above so it wins the cascade). */
+@media (max-width: 760px) {
+  .rb-menu-host { max-height: calc(100dvh - 120px); overflow-y: auto; max-width: calc(100vw - 16px); }
+  .rb-menu { min-width: min(280px, calc(100vw - 16px)); }
+  .rb-mi { flex-wrap: wrap; white-space: normal; }
+  .rb-menu.rb-sub { position: static; flex-basis: 100%; min-width: 0; box-shadow: none; border: 0; border-left: 2px solid var(--accent); margin: 4px 0 2px 26px; padding: 0; }
+  .rb-mi-arrow { top: 6px; transform: rotate(90deg); }
+}

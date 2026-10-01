@@ -26,6 +26,8 @@ export interface Screen {
   icon: LucideIcon;
   color: string;
   kind?: 'sheet' | 'journal-entry' | 'ai' | 'scan' | 'entry' | 'tool';
+  /** Opened from the Reports ▾ menu only — no ribbon button of its own. */
+  menuOnly?: boolean;
   columns?: Col[];
   rows?: (s: LedgerState) => Row[];
   newForm?: FormKind;
@@ -239,6 +241,25 @@ export const SCREENS: Screen[] = [
     id: 'cc-pnl', label: 'Cost Centre P&L', tab: 'Reports', group: 'Management', icon: Grid3x3, color: C.green, kind: 'tool',
     note: 'Income and expenses by cost centre / project, side by side (live mode).',
   },
+  { id: 'rpt-monthly-pnl', label: 'Horizontal Profit and Loss', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Horizontal Profit and Loss', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-ratios', label: 'Business Performance Ratios', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Business Performance Ratios', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-equity', label: 'Movement of Equity', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Movement of Equity', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-sales-by-customer', label: 'Sales by Customer', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Sales by Customer', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-sales-by-item', label: 'Sales by Item', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Sales by Item', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-sales-by-salesperson', label: 'Sales by Sales Person', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Sales by Sales Person', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-sales-summary', label: 'Sales Summary', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Sales Summary', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-customer-balances', label: 'Customer Balance Summary', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Customer Balance Summary', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-ar-aging-details', label: 'AR Aging Details', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'AR Aging Details', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-vendor-balances', label: 'Vendor Balance Summary', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Vendor Balance Summary', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-ap-aging-details', label: 'AP Aging Details', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'AP Aging Details', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-purchases-by-vendor', label: 'Purchases by Vendor', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Purchases by Vendor', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-purchases-by-item', label: 'Purchases by Item', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Purchases by Item', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-expenses-by-category', label: 'Expenses by Category', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Expenses by Category', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-vat-return', label: 'VAT Return Summary', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'VAT Return Summary', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-bank-balances', label: 'Bank & Cash Balances', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Bank & Cash Balances', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-bank-book', label: 'Bank Book', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Bank Book', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-account-type-summary', label: 'Account Type Summary', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Account Type Summary', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
+  { id: 'rpt-expiring-docs', label: 'Expiring Documents', tab: 'Reports', group: 'Reports', icon: FileSpreadsheet, color: C.green, menuOnly: true, columns: [t('x', 'Expiring Documents', 560)], rows: () => [{ x: 'Live report — sign in to a company to run it.', ...meta('muted') }] },
   {
     id: 'recurring-invoices', label: 'Recurring Invoices', tab: 'Receivables', group: 'Sales', icon: Repeat, color: C.teal,
     columns: [t('profile', 'Profile', 90), t('customer', 'Customer', 220), t('desc', 'Description', 220), t('freq', 'Frequency', 90), d('next', 'Next Invoice'), m('amount', 'Amount (net)'), t('active', 'Active', 60)],

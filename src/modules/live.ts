@@ -1,6 +1,7 @@
 // Live mode: which ASCO API endpoint feeds each sheet, and how its JSON becomes grid rows.
 // Field names are the camelCased C-ERP read models / DTOs from server/Asco.Api/ReadEndpoints.cs.
 import type { Col, Row, RowMeta } from './registry';
+import { REPORT_LIVE } from './reportsLive';
 
 type J = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 export interface LiveSpec { path: string; columns: Col[]; rows?: (data: any) => Row[]; payroll?: boolean; admin?: boolean } // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -394,3 +395,6 @@ export const LIVE: Record<string, LiveSpec> = {
     rows: (xs: J[]) => xs.map((x) => ({ ...x, ...(x.status === 'Pending' ? meta('warn') : {}) })),
   },
 };
+
+// Extra reports reachable from the Reports ▾ menu.
+Object.assign(LIVE, REPORT_LIVE);

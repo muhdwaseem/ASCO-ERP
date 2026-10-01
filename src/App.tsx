@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Save, Undo2, Redo2, ChevronDown, Lightbulb, Share2, X, Check, Plus, ChevronLeft, ChevronRight, Grid3x3, Columns3, PanelBottom, Minus,
-  Copy, ArrowDownAZ, ArrowUpAZ, Funnel, Sigma, Download, Printer, FileText, HandCoins, FilePlus, Banknote, Receipt, NotebookPen,
-  Car, Wallet, BadgeCheck, CalendarDays, ChevronUp, RefreshCw, LogOut, UserPlus, Building2, Mail, FileDown,
-  FileMinus, FileX, ClipboardList, Send, ArrowRightLeft, Warehouse, PackagePlus, PackageMinus, ArrowLeftRight, SlidersHorizontal, FileOutput, Layers, Factory, CircleCheck, CircleX, Briefcase, Truck, Route, Settings2,
+  Save, Undo2, Redo2, ChevronDown, Lightbulb, Share2, X, Check, Plus, ChevronLeft, ChevronRight, Grid3x3, Columns3, PanelBottom, Minus, Copy, ArrowDownAZ, ArrowUpAZ, Funnel, Sigma, Download, Printer, FileText, HandCoins, FilePlus, Banknote, Receipt, NotebookPen, Car, Wallet, BadgeCheck, CalendarDays, ChevronUp, RefreshCw, LogOut, UserPlus, Building2, Mail, FileDown, FileMinus, FileX, ClipboardList, Send, ArrowRightLeft, Warehouse, PackagePlus, PackageMinus, ArrowLeftRight, SlidersHorizontal, FileOutput, Layers, Factory, CircleCheck, CircleX, Briefcase, Truck, Route, Settings2, Database,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, sessionActions, useSession, type Lookups } from './api/client';
@@ -19,6 +16,8 @@ import { LiveDocForm, LIVE_TARGET, type LiveFormKind, type LivePrefill } from '.
 import { PrintDoc, type PrintKind } from './components/PrintDoc';
 import { EntryHeader, entryView, isEntrySheet, openDocsPath, postEntrySheet, toOpenDocs, useEntryStores } from './components/EntrySheets';
 import { isToolSheet, ToolHeader, toolPath, toolView, useAssets, useToolStores } from './components/AccountingSheets';
+import { REPORT_MENU } from './modules/reportMenu';
+import type { MenuItem } from './components/Ribbon';
 import { DocForm } from './components/DocForm';
 import { AiPanel } from './components/AiPanel';
 import { ScanBill } from './components/ScanBill';
@@ -273,6 +272,14 @@ export default function App() {
     liveRun(async () => { await api.post(`/estimates/${activeId}/status`, { status }, cid); return `Quotation marked ${status}`; });
   };
 
+  // Reports ▾ — every report by category (hides reports of industry modules this company hasn't enabled).
+  const reportMenu: MenuItem[] = REPORT_MENU.map((cat) => ({
+    label: cat.label, icon: cat.icon, color: cat.color,
+    items: cat.items.flatMap((it): MenuItem[] => {
+      if (it.sub) { const subs = it.sub.filter((x) => screenVisible(screenById(x.id))); return subs.length ? [{ label: it.label, items: subs.map((x) => ({ label: x.label, run: () => openSheet(x.id) })) }] : []; }
+      return screenVisible(screenById(it.id!)) ? [{ label: it.label, run: () => openSheet(it.id!) }] : [];
+    }),
+  })).filter((c) => c.items!.length);
   const newDoc = (k: FormKind) => ({ needs: 'post' as const, run: () => (live ? setLiveForm(k) : setForm(k)) });
   const extra: Record<string, ActionGroup[]> = {
     Home: [
@@ -402,7 +409,7 @@ export default function App() {
         liveRun(async () => `Downloaded ${await api.download(`/payroll-runs/${activeId}/wps`, cid)}`);
       } },
     ] }],
-    Reports: [{ group: 'Output', actions: [{ label: 'Export CSV', icon: Download, color: C.gray, run: toCsv }, { label: 'Print', icon: Printer, color: C.gray, run: () => window.print() }] }],
+    Reports: [{ group: 'Get Report', position: 'start', actions: [{ label: 'Reports', icon: Database, color: C.green, run: () => {}, menu: reportMenu, title: 'All reports by category' }] }, { group: 'Output', actions: [{ label: 'Export CSV', icon: Download, color: C.gray, run: toCsv }, { label: 'Print', icon: Printer, color: C.gray, run: () => window.print() }] }],
     Settings: [{ group: 'Industry', actions: [{ label: 'Configure Industry', icon: Settings2, color: C.teal, needs: 'admin', run: () => setModuleForm('industry') }] }, { group: 'Period End', actions: [
       { label: 'Add Missing Months', icon: CalendarDays, color: C.green, needs: 'admin', run: () => liveRun(async () => {
         const made = await api.post<string[]>('/fiscal-periods/extend', {}, cid);

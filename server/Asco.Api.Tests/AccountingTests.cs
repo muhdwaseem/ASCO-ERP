@@ -39,6 +39,24 @@ public class AccountingTests(AscoFactory factory) : IClassFixture<AscoFactory>
     }
 
     [Fact]
+    public async Task Report_menu_endpoints_load()
+    {
+        var c = await Owner();
+        foreach (var path in new[] { "sales-by-item", "purchases-by-item", "vat-return", "ratios", "equity-movement", "monthly-pnl", "bank-book" })
+            Assert.Equal(HttpStatusCode.OK, (await c.GetAsync($"/api/reports/{path}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Movement_of_equity_closes_at_balance_sheet_equity()
+    {
+        var c = await Owner();
+        var eq = await c.GetFromJsonAsync<JsonElement>("/api/reports/equity-movement");
+        var bs = await c.GetFromJsonAsync<JsonElement>("/api/reports/balance-sheet");
+        var bsEquity = bs.GetProperty("equity").EnumerateArray().Sum(l => l.GetProperty("amount").GetDecimal()) + bs.GetProperty("currentYearEarnings").GetDecimal();
+        Assert.Equal(bsEquity, eq.GetProperty("totalClosing").GetDecimal());
+    }
+
+    [Fact]
     public async Task Prepayment_rejects_a_non_expense_account()
     {
         var c = await Owner();

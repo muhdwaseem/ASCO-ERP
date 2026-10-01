@@ -1,4 +1,4 @@
-using AegisErp.Infrastructure;
+﻿using AegisErp.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
 namespace Asco.Api.Modules;
@@ -31,5 +31,6 @@ public static class ModuleSetup
         api.MapManufacturingEndpoints();
         api.MapJobsEndpoints();
         api.MapAccountingEndpoints();
+        api.MapReportEndpoints();
     }
 }

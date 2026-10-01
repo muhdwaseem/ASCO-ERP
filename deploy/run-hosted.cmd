@@ -19,4 +19,4 @@ set Security__BehindProxy=true
 set DataProtection__KeysPath=%~dp0keys
 
 echo ASCO is starting on http://127.0.0.1:%ASCO_PORT%  (Ctrl+C to stop)
-Asco.Api.exe
+"%~dp0Asco.Api.exe"

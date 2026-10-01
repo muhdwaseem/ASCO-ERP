@@ -343,6 +343,19 @@ internal static class ReadEndpoints
             });
         });
 
+        api.MapGet("/estimates/{id:int}", async (int id, EstimateService svc) =>
+        {
+            var e = await svc.GetByIdAsync(id);
+            return e is null ? Results.NotFound() : Results.Ok(new
+            {
+                e.Id, e.EstimateNo, e.Date, e.ValidUntil, e.Status, e.Narration,
+                ConvertedInvoiceNo = e.ConvertedInvoice == null ? null : e.ConvertedInvoice.InvoiceNo,
+                Customer = new { e.Customer.Code, e.Customer.Name, e.Customer.Trn, e.Customer.Email, e.Customer.Address, e.Customer.Mobile },
+                Lines = e.Lines.OrderBy(l => l.LineNo).Select(l => new { l.LineNo, l.Description, l.Quantity, l.UnitPrice, l.VatRate, l.Net, l.Vat, l.Gross }),
+                Net = e.TotalNet, Vat = e.TotalVat, Gross = e.TotalGross,
+            });
+        });
+
         api.MapGet("/receipts/{id:int}", async (int id, IDbContextFactory<AegisDbContext> dbf) =>
         {
             await using var db = await dbf.CreateDbContextAsync();

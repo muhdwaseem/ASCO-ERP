@@ -3,7 +3,7 @@ import {
   Save, Undo2, Redo2, ChevronDown, Lightbulb, Share2, X, Check, Plus, ChevronLeft, ChevronRight, Grid3x3, Columns3, PanelBottom, Minus,
   Copy, ArrowDownAZ, ArrowUpAZ, Funnel, Sigma, Download, Printer, FileText, HandCoins, FilePlus, Banknote, Receipt, NotebookPen,
   Car, Wallet, BadgeCheck, CalendarDays, ChevronUp, RefreshCw, LogOut, UserPlus, Building2, Mail, FileDown,
-  FileMinus, FileX, Warehouse, PackagePlus, PackageMinus, ArrowLeftRight, SlidersHorizontal, FileOutput, Layers, Factory, CircleCheck, CircleX, Briefcase, Truck, Route, Settings2,
+  FileMinus, FileX, ClipboardList, Send, ArrowRightLeft, Warehouse, PackagePlus, PackageMinus, ArrowLeftRight, SlidersHorizontal, FileOutput, Layers, Factory, CircleCheck, CircleX, Briefcase, Truck, Route, Settings2,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, sessionActions, useSession, type Lookups } from './api/client';
@@ -211,6 +211,18 @@ export default function App() {
     setPrinting({ kind, id: activeId });
   };
 
+  /** A date in an open fiscal period: today if open, otherwise the latest open period's last day. */
+  const postingDate = () => {
+    const open = lookups.data?.openPeriods ?? [];
+    if (open.some((p) => today >= p.startDate && today <= p.endDate)) return today;
+    const last = open[open.length - 1];
+    return last ? (last.endDate < today ? last.endDate : last.startDate) : today;
+  };
+  const quoteStatus = (status: string) => {
+    if (active !== 'estimates' || !activeId) return notify('Select a quotation row on the Estimate / Quotation sheet first', 'err');
+    liveRun(async () => { await api.post(`/estimates/${activeId}/status`, { status }, cid); return `Quotation marked ${status}`; });
+  };
+
   const newDoc = (k: FormKind) => ({ needs: 'post' as const, run: () => (live ? setLiveForm(k) : setForm(k)) });
   const extra: Record<string, ActionGroup[]> = {
     Home: [
@@ -238,10 +250,20 @@ export default function App() {
     ],
     Finance: [{ group: 'Post', actions: [{ label: 'Post Voucher', icon: BadgeCheck, color: C.green, needs: 'post', run: () => postJv(), title: 'Post the journal voucher (Ctrl+Enter)' }] }],
     Receivables: [
-      { group: 'New', actions: [{ label: 'New Invoice', icon: FileText, color: C.green, ...newDoc('sales-invoice') }, { label: 'New Receipt', icon: HandCoins, color: C.green, ...newDoc('receipt') }, { label: 'New Credit Note', icon: FileMinus, color: C.red, needs: 'post', run: () => setLiveForm('credit-note') }, { label: 'New Customer', icon: UserPlus, color: C.blue, needs: 'post', run: () => setLiveForm('customer') }] },
+      { group: 'New', actions: [{ label: 'New Invoice', icon: FileText, color: C.green, ...newDoc('sales-invoice') }, { label: 'New Receipt', icon: HandCoins, color: C.green, ...newDoc('receipt') }, { label: 'New Quotation', icon: ClipboardList, color: C.purple, needs: 'post', run: () => setLiveForm('estimate') }, { label: 'New Credit Note', icon: FileMinus, color: C.red, needs: 'post', run: () => setLiveForm('credit-note') }, { label: 'New Customer', icon: UserPlus, color: C.blue, needs: 'post', run: () => setLiveForm('customer') }] },
       { group: 'Documents', actions: [
         { label: 'Print Invoice', icon: Printer, color: C.gray, small: true, needs: 'live', run: () => printSelected('invoice', 'sales-invoices', 'sales invoice') },
         { label: 'Print Receipt', icon: Printer, color: C.gray, small: true, needs: 'live', run: () => printSelected('receipt', 'receipts', 'receipt') },
+        { label: 'Print Quotation', icon: Printer, color: C.gray, small: true, needs: 'live', run: () => printSelected('quotation', 'estimates', 'quotation') },
+      ] },
+      { group: 'Quotation', actions: [
+        { label: 'Mark Sent', icon: Send, color: C.blue, small: true, needs: 'post', run: () => quoteStatus('Sent') },
+        { label: 'Mark Accepted', icon: BadgeCheck, color: C.green, small: true, needs: 'post', run: () => quoteStatus('Accepted') },
+        { label: 'Mark Declined', icon: X, color: C.red, small: true, needs: 'post', run: () => quoteStatus('Declined') },
+        { label: 'Convert to Invoice', icon: ArrowRightLeft, color: C.green, needs: 'post', run: () => {
+          if (active !== 'estimates' || !activeId) return notify('Select a quotation row on the Estimate / Quotation sheet first', 'err');
+          liveRun(async () => { const r = await api.post<{ number: string }>(`/estimates/${activeId}/convert`, { date: postingDate() }, cid); return `Converted to invoice ${r.number} — now posted to the books`; });
+        } },
         { label: 'Send Reminder', icon: Mail, color: C.gray, small: true, needs: 'post', run: () => {
           if (active !== 'sales-invoices' || !activeId) return notify('Select an invoice row on the Sales Invoice sheet first', 'err');
           liveRun(async () => { await api.post(`/sales-invoices/${activeId}/remind`, {}, cid); return 'Reminder emailed to the customer (via C-ERP EmailService)'; });
@@ -331,7 +353,11 @@ export default function App() {
       } },
     ] }],
     Reports: [{ group: 'Output', actions: [{ label: 'Export CSV', icon: Download, color: C.gray, run: toCsv }, { label: 'Print', icon: Printer, color: C.gray, run: () => window.print() }] }],
-    Settings: [{ group: 'Industry', actions: [{ label: 'Configure Industry', icon: Settings2, color: C.teal, needs: 'admin', run: () => setModuleForm('industry') }] }, { group: 'Period End', actions: [{ label: 'Close Period', icon: CalendarDays, color: C.red, needs: 'admin', run: () => live ? liveRun(async () => {
+    Settings: [{ group: 'Industry', actions: [{ label: 'Configure Industry', icon: Settings2, color: C.teal, needs: 'admin', run: () => setModuleForm('industry') }] }, { group: 'Period End', actions: [
+      { label: 'Add Missing Months', icon: CalendarDays, color: C.green, needs: 'admin', run: () => liveRun(async () => {
+        const made = await api.post<string[]>('/fiscal-periods/extend', {}, cid);
+        return made.length ? `Opened ${made.length} period(s): ${made.join(', ')}` : 'All months up to today already have periods';
+      }) },{ label: 'Close Period', icon: CalendarDays, color: C.red, needs: 'admin', run: () => live ? liveRun(async () => {
       const periods = await api.get<{ id: number; name: string; endDate: string; isClosed: boolean }[]>('/fiscal-periods', cid);
       const p = periods.find((x) => !x.isClosed && x.endDate < today);
       if (!p) throw new Error('No completed period left to close.');
@@ -369,7 +395,7 @@ export default function App() {
     if (n === 'admin' && !grant?.canAdminister) return 'Needs company administrator access';
     return null;
   };
-  const liveOnly = (label: string) => !live && (/^(New Customer|New Vendor|New Credit Note|New Debit Note|Send Reminder|WPS File|Approve Leave|Reject Leave|Portal Access|Configure Industry)$/.test(label) || ['Inventory', 'Manufacturing', 'Jobs'].includes(tab));
+  const liveOnly = (label: string) => !live && (/^(New Customer|New Vendor|Add Missing Months|New Quotation|Print Quotation|Mark Sent|Mark Accepted|Mark Declined|Convert to Invoice|New Credit Note|New Debit Note|Send Reminder|WPS File|Approve Leave|Reject Leave|Portal Access|Configure Industry)$/.test(label) || ['Inventory', 'Manufacturing', 'Jobs'].includes(tab));
   const ribbonExtra = (extra[tab] ?? []).map((g) => ({
     ...g,
     actions: g.actions.map((a) => {

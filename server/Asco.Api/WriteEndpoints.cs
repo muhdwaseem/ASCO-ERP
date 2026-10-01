@@ -28,6 +28,8 @@ public record CurrencyRequest(string Code, string Name, decimal RateToBase);
 public record RateRequest(decimal RateToBase);
 public record GenerateYearRequest(DateOnly YearStart);
 public record ConvertEstimateRequest(DateOnly? Date);
+public record EstimateRequest(int CustomerId, DateOnly Date, DateOnly ValidUntil, string? Narration, List<EstimateLineInput> Lines);
+public record EstimateStatusRequest(DocumentStatus Status);
 
 internal static class WriteEndpoints
 {
@@ -113,9 +115,24 @@ internal static class WriteEndpoints
             return Results.Created($"/api/credit-notes/{cn.Id}", new { cn.Id, number = cn.CreditNoteNo });
         });
 
+        // Quotations don't touch the GL, so no fiscal-period check — only conversion to an invoice posts.
+        post.MapPost("/estimates", async (EstimateRequest r, EstimateService svc, ClaimsPrincipal u) =>
+        {
+            var e = await svc.CreateAsync(r.CustomerId, r.Date, r.ValidUntil, r.Narration, Actor(u), r.Lines, DateTime.UtcNow);
+            return Results.Created($"/api/estimates/{e.Id}", new { e.Id, number = e.EstimateNo, e.Status });
+        });
+        post.MapPost("/estimates/{id:int}/status", async (int id, EstimateStatusRequest r, EstimateService svc) =>
+        {
+            if (r.Status == DocumentStatus.Converted) throw new PostingException("Use Convert to Invoice to convert a quotation.");
+            await svc.SetStatusAsync(id, r.Status);
+            return Results.NoContent();
+        });
+
         post.MapPost("/estimates/{id:int}/convert", async (int id, ConvertEstimateRequest r, EstimateService svc, LedgerService ledger, ClaimsPrincipal u) =>
         {
-            var inv = await svc.ConvertToInvoiceAsync(id, await OpenPeriodFor(ledger, r.Date ?? DateOnly.FromDateTime(DateTime.Today)), Actor(u), DateTime.UtcNow);
+            // C-ERP dates the invoice with the quotation's own date, so the period must match that date.
+            var est = await svc.GetByIdAsync(id) ?? throw new PostingException("Quotation not found.");
+            var inv = await svc.ConvertToInvoiceAsync(id, await OpenPeriodFor(ledger, est.Date), Actor(u), DateTime.UtcNow);
             return Results.Ok(new { inv.Id, number = inv.InvoiceNo, inv.Status });
         });
 
@@ -216,6 +233,25 @@ internal static class WriteEndpoints
             var t = await svc.AddAsync(r);
             return Results.Created($"/api/tax-codes/{t.Id}", new { t.Id, t.Code });
         });
+        // Adds consecutive monthly periods after the latest one until today is covered (keeps the
+        // company's own financial-year numbering, e.g. a July-start year). No periods yet -> calendar year.
+        admin.MapPost("/fiscal-periods/extend", async (FiscalPeriodService svc) =>
+        {
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var all = await svc.GetAllAsync();
+            if (all.Count == 0) return Results.Ok((await svc.GenerateMonthlyYearAsync(new DateOnly(today.Year, 1, 1))).Select(p => p.Name));
+            var last = all.OrderBy(p => p.EndDate).Last();
+            var created = new List<string>();
+            int year = last.Year, no = last.PeriodNo;
+            for (var start = last.EndDate.AddDays(1); start <= today; start = start.AddMonths(1))
+            {
+                if (++no > 12) { no = 1; year++; }
+                var end = start.AddMonths(1).AddDays(-1);
+                created.Add((await svc.CreateAsync(start.ToString("MMM yyyy"), year, no, start, end)).Name);
+            }
+            return Results.Ok(created);
+        });
+
         admin.MapPost("/fiscal-periods/generate-year", async (GenerateYearRequest r, FiscalPeriodService svc) =>
             (await svc.GenerateMonthlyYearAsync(r.YearStart)).Select(p => new { p.Id, p.Name }));
         admin.MapPost("/fiscal-periods/{id:int}/close", async (int id, FiscalPeriodService svc) => { await svc.SetClosedAsync(id, true); return Results.NoContent(); });

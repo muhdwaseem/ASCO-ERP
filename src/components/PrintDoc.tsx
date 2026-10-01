@@ -6,11 +6,11 @@ import { useQuery } from '@tanstack/react-query';
 import { X, Printer } from 'lucide-react';
 import { api } from '../api/client';
 
-export type PrintKind = 'invoice' | 'receipt' | 'payslips';
+export type PrintKind = 'invoice' | 'receipt' | 'payslips' | 'quotation';
 type J = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 const f = (n?: number | null) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const PATH: Record<PrintKind, string> = { invoice: '/sales-invoices/', receipt: '/receipts/', payslips: '/payroll-runs/' };
+const PATH: Record<PrintKind, string> = { invoice: '/sales-invoices/', receipt: '/receipts/', payslips: '/payroll-runs/', quotation: '/estimates/' };
 
 export function PrintDoc({ kind, id, companyId, onClose }: { kind: PrintKind; id: number; companyId: number; onClose: () => void }) {
   const company = useQuery({ queryKey: ['company-profile', companyId], queryFn: () => api.get<J>('/company-profile', companyId) });
@@ -41,7 +41,7 @@ export function PrintDoc({ kind, id, companyId, onClose }: { kind: PrintKind; id
               {c.phone && <p>Tel {c.phone}</p>}
               {c.trnNumber && <p>TRN {c.trnNumber}</p>}
             </div>
-            <div className="pd-title">{kind === 'invoice' ? (c.vatRegistered ? 'TAX INVOICE' : 'INVOICE') : kind === 'receipt' ? 'RECEIPT VOUCHER' : 'PAYSLIPS'}</div>
+            <div className="pd-title">{kind === 'invoice' ? (c.vatRegistered ? 'TAX INVOICE' : 'INVOICE') : kind === 'quotation' ? 'QUOTATION' : kind === 'receipt' ? 'RECEIPT VOUCHER' : 'PAYSLIPS'}</div>
           </header>
 
           {kind === 'invoice' && (
@@ -57,6 +57,23 @@ export function PrintDoc({ kind, id, companyId, onClose }: { kind: PrintKind; id
               <section className="pd-totals"><div><span>Net</span><b>{f(d.net)}</b></div><div><span>VAT</span><b>{f(d.vat)}</b></div><div className="grand"><span>Total ({c.baseCurrency})</span><b>{f(d.gross)}</b></div>{d.balance != null && <div><span>Balance due</span><b>{f(d.balance)}</b></div>}</section>
               {c.bank && <section className="pd-note"><b>Bank details</b><p>{c.bank.bankName} · {c.bank.accountName} · IBAN {c.bank.iban}{c.bank.swift ? ` · SWIFT ${c.bank.swift}` : ''}</p></section>}
               {(d.termsAndConditions || c.invoiceDefaultTermsAndConditions) && <section className="pd-note"><b>Terms</b><p>{d.termsAndConditions || c.invoiceDefaultTermsAndConditions}</p></section>}
+            </>
+          )}
+
+          {kind === 'quotation' && (
+            <>
+              <section className="pd-meta">
+                <div><b>Prepared for</b><p>{d.customer.name}</p>{d.customer.address && <p>{d.customer.address}</p>}{d.customer.trn && <p>TRN {d.customer.trn}</p>}</div>
+                <dl><dt>Quotation no.</dt><dd>{d.estimateNo}</dd><dt>Date</dt><dd>{d.date}</dd><dt>Valid until</dt><dd>{d.validUntil}</dd></dl>
+              </section>
+              <table className="pd-lines">
+                <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Rate</th><th>Net</th><th>VAT %</th><th>VAT</th><th>Total</th></tr></thead>
+                <tbody>{d.lines.map((l: J) => <tr key={l.lineNo}><td>{l.lineNo}</td><td>{l.description}</td><td className="n">{l.quantity}</td><td className="n">{f(l.unitPrice)}</td><td className="n">{f(l.net)}</td><td className="n">{Math.round(l.vatRate * 100)}%</td><td className="n">{f(l.vat)}</td><td className="n">{f(l.gross)}</td></tr>)}</tbody>
+              </table>
+              <section className="pd-totals"><div><span>Net</span><b>{f(d.net)}</b></div><div><span>VAT</span><b>{f(d.vat)}</b></div><div className="grand"><span>Total ({c.baseCurrency})</span><b>{f(d.gross)}</b></div></section>
+              {d.narration && <section className="pd-note"><p>{d.narration}</p></section>}
+              {c.invoiceDefaultTermsAndConditions && <section className="pd-note"><b>Terms</b><p>{c.invoiceDefaultTermsAndConditions}</p></section>}
+              <section className="pd-sign"><span>For {c.tradeName || c.legalName}</span><span>Accepted by customer</span></section>
             </>
           )}
 

@@ -30,7 +30,7 @@ export interface Screen {
   group: string;
   icon: LucideIcon;
   color: string;
-  kind?: 'sheet' | 'journal-entry' | 'ai' | 'scan' | 'invoice-entry' | 'receipt-batch';
+  kind?: 'sheet' | 'journal-entry' | 'ai' | 'scan' | 'entry';
   columns?: Col[];
   rows?: (s: LedgerState) => Row[];
   newForm?: FormKind;
@@ -197,12 +197,28 @@ export const SCREENS: Screen[] = [
     },
   },
   {
-    id: 'invoice-entry', label: 'Invoice Entry', tab: 'Receivables', group: 'Fast Entry', icon: FileSpreadsheet, color: C.green, kind: 'invoice-entry',
+    id: 'invoice-entry', label: 'Invoice Entry', tab: 'Receivables', group: 'Fast Entry', icon: FileSpreadsheet, color: C.green, kind: 'entry',
     note: 'Type the invoice straight into the cells: customer in the strip, lines in the grid, Ctrl+Enter to post (live mode).',
   },
   {
-    id: 'receipt-batch', label: 'Receipt Batch', tab: 'Receivables', group: 'Fast Entry', icon: ListChecks, color: C.green, kind: 'receipt-batch',
+    id: 'quote-entry', label: 'Quotation Entry', tab: 'Receivables', group: 'Fast Entry', icon: ClipboardList, color: C.purple, kind: 'entry',
+    note: 'Type the quotation into the cells; Ctrl+Enter saves it (live mode).',
+  },
+  {
+    id: 'receipt-batch', label: 'Receipt Batch', tab: 'Receivables', group: 'Fast Entry', icon: ListChecks, color: C.green, kind: 'entry',
     note: 'One receipt per row; Post all posts every ready row (live mode).',
+  },
+  {
+    id: 'bill-entry', label: 'Bill Entry', tab: 'Payables', group: 'Fast Entry', icon: FileSpreadsheet, color: C.orange, kind: 'entry',
+    note: 'Type the vendor bill into the cells: vendor in the strip, lines in the grid, Ctrl+Enter to post (live mode).',
+  },
+  {
+    id: 'payment-batch', label: 'Payment Batch', tab: 'Payables', group: 'Fast Entry', icon: ListChecks, color: C.orange, kind: 'entry',
+    note: 'One vendor payment per row; Post all posts every ready row (live mode).',
+  },
+  {
+    id: 'expense-batch', label: 'Expense Batch', tab: 'Payables', group: 'Fast Entry', icon: Receipt, color: C.red, kind: 'entry',
+    note: 'One expense per row; Post all posts every ready row (live mode).',
   },
   {
     id: 'recurring-invoices', label: 'Recurring Invoices', tab: 'Receivables', group: 'Sales', icon: Repeat, color: C.teal,

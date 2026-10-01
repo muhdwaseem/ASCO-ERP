@@ -1,8 +1,16 @@
-// Excel-style data entry for live companies: type documents straight into the grid.
-//  • Invoice Entry — header strip (customer, date, narration) + line cells; Ctrl+Enter posts.
-//  • Receipt Batch — one receipt per row; "Post all" posts every ready row and reports per row.
-// Cells that need a customer / item / account / invoice offer search-as-you-type (Grid optionsFor).
-// Everything posts through the ASCO API → C-ERP's own services, same as the popup forms.
+// Excel-style "fast entry" for live companies — type documents straight into the grid.
+//
+//  Document sheets (header strip + line cells, Ctrl+Enter posts):
+//    invoice-entry  Sales invoice   → POST /sales-invoices   (or Save draft)
+//    quote-entry    Quotation       → POST /estimates        (saved, not posted)
+//    bill-entry     Purchase bill   → POST /purchase-invoices
+//  Batch sheets (one document per row, "Post all" posts every ready row and reports per row):
+//    receipt-batch  Customer receipts → POST /receipts
+//    payment-batch  Vendor payments   → POST /vendor-payments
+//    expense-batch  Direct expenses   → POST /expenses
+//
+// Cells that need a customer / vendor / item / account / invoice offer search-as-you-type
+// (Grid optionsFor). Everything posts through the ASCO API → C-ERP's own services.
 import { useState, useSyncExternalStore } from 'react';
 import type { Col, Row, RowMeta } from '../modules/registry';
 import { api, vatFraction, type Lookups } from '../api/client';
@@ -11,15 +19,20 @@ import { api, vatFraction, type Lookups } from '../api/client';
 
 function createStore<T>(init: () => T) {
   let value = init();
-  let ver = 0;
   const subs = new Set<() => void>();
-  const set = (v: T) => { value = v; ver++; subs.forEach((f) => f()); };
-  return {
-    get: () => value,
-    set,
-    reset: () => set(init()),
-    useValue: () => { useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => ver); return value; },
-  };
+  const set = (v: T) => { value = v; version++; subs.forEach((f) => f()); };
+  return { get: () => value, set, reset: () => set(init()), subs };
+}
+let version = 0;
+const allSubs = new Set<() => void>();
+/** Re-render the caller whenever any entry sheet changes. */
+export function useEntryStores() {
+  return useSyncExternalStore((cb) => { allSubs.add(cb); return () => allSubs.delete(cb); }, () => version);
+}
+function store<T>(init: () => T) {
+  const s = createStore(init);
+  const set = (v: T) => { s.set(v); allSubs.forEach((f) => f()); };
+  return { get: s.get, set, reset: () => set(init()) };
 }
 
 const num = (v: string) => (v.trim() === '' ? 0 : Number(v.replace(/,/g, '')) || 0);
@@ -29,15 +42,15 @@ const meta = (style?: RowMeta['style']) => ({ _meta: { style } as RowMeta });
 const t = (key: string, label: string, width = 120): Col => ({ key, label, width });
 const m = (key: string, label: string, width = 110): Col => ({ key, label, width, type: 'money' });
 const n = (key: string, label: string, width = 70): Col => ({ key, label, width, type: 'number' });
+const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
-type Customer = Lookups['customers'][number];
+type Party = { id: number; code: string; name: string; paymentTermsDays?: number };
 type Item = Lookups['items'][number];
-type Account = Lookups['accounts'][number];
-type Bank = Lookups['bankAccounts'][number];
+type Acct = { id: number; code: string; name: string };
 
-const custLabel = (c: Customer) => `${c.code} · ${c.name}`;
+const partyLabel = (p: Party) => `${p.code} · ${p.name}`;
 const itemLabel = (i: Item) => `${i.code} · ${i.name}`;
-const acctLabel = (a: { code: string; name: string }) => `${a.code} · ${a.name}`;
+const acctLabel = (a: Acct) => `${a.code} · ${a.name}`;
 
 /** Resolve typed text to a record: exact label, then code, then a unique "contains" match. */
 function resolve<T>(list: T[], label: (x: T) => string, code: (x: T) => string, text: string): T | undefined {
@@ -47,12 +60,18 @@ function resolve<T>(list: T[], label: (x: T) => string, code: (x: T) => string, 
     ?? list.find((x) => code(x).toLowerCase() === q.split(' ')[0])
     ?? (() => { const hits = list.filter((x) => label(x).toLowerCase().includes(q)); return hits.length === 1 ? hits[0] : undefined; })();
 }
+const findParty = (list: Party[], text: string) => resolve(list, partyLabel, (p) => p.code, text);
+const findAcct = (list: Acct[], text: string) => resolve(list, acctLabel, (a) => a.code, text);
+const findItem = (L: Lookups, text: string) => resolve(L.items, itemLabel, (i) => i.code, text);
+const incomeAccounts = (L: Lookups) => L.accounts.filter((a) => a.type === 'Income');
+const costAccounts = (L: Lookups) => L.accounts.filter((a) => a.type === 'Expense' || a.type === 'Asset');
 
 /** Small search box with a suggestion list — used in the header strips. */
 function Combo({ value, options, placeholder, onChange }: { value: string; options: string[]; placeholder?: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0);
   const matches = options.filter((o) => o.toLowerCase().includes(value.trim().toLowerCase())).slice(0, 8);
+  const show = open && matches.length > 0 && !options.includes(value);
   return (
     <span className="combo" style={{ position: 'relative', display: 'block' }}>
       <input value={value} placeholder={placeholder} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 120)}
@@ -60,9 +79,9 @@ function Combo({ value, options, placeholder, onChange }: { value: string; optio
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(matches.length - 1, h + 1)); }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); }
-          else if ((e.key === 'Enter' || e.key === 'Tab') && open && matches.length && !options.includes(value)) { onChange(matches[hi] ?? matches[0]); setOpen(false); }
+          else if ((e.key === 'Enter' || e.key === 'Tab') && show) { onChange(matches[hi] ?? matches[0]); setOpen(false); }
         }} />
-      {open && matches.length > 0 && !options.includes(value) && (
+      {show && (
         <div className="cell-suggest" onMouseDown={(e) => e.preventDefault()}>
           {matches.map((o, i) => <div key={o} className={i === hi ? 'on' : ''} onMouseDown={() => { onChange(o); setOpen(false); }}>{o}</div>)}
         </div>
@@ -71,33 +90,44 @@ function Combo({ value, options, placeholder, onChange }: { value: string; optio
   );
 }
 
-// ================================================================ INVOICE ENTRY
+// ================================================================ DOCUMENT SHEETS (invoice / quote / bill)
 
-interface InvLine { item: string; description: string; account: string; qty: string; rate: string; vat: string }
-interface InvDraft { customer: string; date: string; narration: string; lines: InvLine[] }
-const INV_LINES = 12;
-const blankLine = (): InvLine => ({ item: '', description: '', account: '', qty: '', rate: '', vat: '' });
-export const invoiceDraft = createStore<InvDraft>(() => ({ customer: '', date: '', narration: '', lines: Array.from({ length: INV_LINES }, blankLine) }));
+type DocKind = 'invoice-entry' | 'quote-entry' | 'bill-entry';
+interface Line { item: string; description: string; account: string; qty: string; rate: string; vat: string }
+interface DocDraft { party: string; date: string; validUntil: string; reference: string; narration: string; lines: Line[] }
+const DOC_LINES = 12;
+const blankLine = (): Line => ({ item: '', description: '', account: '', qty: '', rate: '', vat: '' });
+const blankDoc = (): DocDraft => ({ party: '', date: '', validUntil: '', reference: '', narration: '', lines: Array.from({ length: DOC_LINES }, blankLine) });
+const docs: Record<DocKind, ReturnType<typeof store<DocDraft>>> = {
+  'invoice-entry': store(blankDoc), 'quote-entry': store(blankDoc), 'bill-entry': store(blankDoc),
+};
 
-export const INVOICE_COLUMNS: Col[] = [
-  t('item', 'Item (type to search)', 210), t('description', 'Description', 240), t('account', 'Revenue Account', 220),
+const DOC_CFG = {
+  'invoice-entry': { party: 'Customer', sales: true, noun: 'invoice', postLabel: 'Post invoice', canDraft: true },
+  'quote-entry': { party: 'Customer', sales: true, noun: 'quotation', postLabel: 'Save quotation', canDraft: false },
+  'bill-entry': { party: 'Vendor', sales: false, noun: 'bill', postLabel: 'Post bill', canDraft: false },
+} as const;
+
+const docColumns = (k: DocKind): Col[] => [
+  t('item', 'Item (type to search)', 210), t('description', 'Description', 240), t('account', DOC_CFG[k].sales ? 'Revenue Account' : 'Expense Account', 220),
   n('qty', 'Qty', 70), m('rate', 'Rate', 100), t('vat', 'VAT', 56), m('net', 'Net', 110), m('vatAmt', 'VAT Amt', 90), m('total', 'Total', 110),
 ];
-const INV_KEYS: (keyof InvLine)[] = ['item', 'description', 'account', 'qty', 'rate', 'vat'];
+const LINE_KEYS: (keyof Line)[] = ['item', 'description', 'account', 'qty', 'rate', 'vat'];
 const vatOf = (v: string) => (v.trim() === '' ? 0.05 : v.startsWith('0') ? 0 : 0.05);
-const hasContent = (l: InvLine) => !!(l.item || l.description || l.account || l.qty || l.rate);
-const revenueAccounts = (L: Lookups) => L.accounts.filter((a) => a.type === 'Income');
+const hasContent = (l: Line) => !!(l.item || l.description || l.account || l.qty || l.rate);
+const docParties = (k: DocKind, L: Lookups): Party[] => (DOC_CFG[k].sales ? L.customers : L.vendors);
+const docAccounts = (k: DocKind, L: Lookups): Acct[] => (DOC_CFG[k].sales ? incomeAccounts(L) : costAccounts(L));
 
-function lineProblem(L: Lookups, l: InvLine): string | null {
-  if (l.item && !resolve(L.items, itemLabel, (i) => i.code, l.item)) return `item "${l.item}" not found`;
-  if (!resolve(revenueAccounts(L), acctLabel, (a) => a.code, l.account)) return 'choose a revenue account';
+function lineProblem(k: DocKind, L: Lookups, l: Line): string | null {
+  if (l.item && !findItem(L, l.item)) return `item "${l.item}" not found`;
+  if (!findAcct(docAccounts(k, L), l.account)) return `choose ${DOC_CFG[k].sales ? 'a revenue' : 'an expense'} account`;
   if (num(l.qty) <= 0) return 'enter a quantity';
   if (l.rate.trim() === '') return 'enter a rate';
   return null;
 }
 
-export function invoiceView(L: Lookups | undefined, d: InvDraft) {
-  if (!L) return { columns: INVOICE_COLUMNS, rows: [{ item: 'Loading lists…', ...meta('muted') }] as Row[] };
+function docView(k: DocKind, L: Lookups) {
+  const d = docs[k].get();
   let net = 0, vat = 0;
   const problems: string[] = [];
   const rows: Row[] = d.lines.map((l, i) => {
@@ -105,226 +135,373 @@ export function invoiceView(L: Lookups | undefined, d: InvDraft) {
     const lnNet = r2(num(l.qty) * num(l.rate));
     const lnVat = r2(lnNet * vatOf(l.vat));
     net += lnNet; vat += lnVat;
-    const p = lineProblem(L, l);
+    const p = lineProblem(k, L, l);
     if (p) problems.push(`Line ${i + 1}: ${p}`);
     return {
       item: l.item, description: l.description, account: l.account, qty: l.qty === '' ? undefined : num(l.qty), rate: l.rate === '' ? undefined : num(l.rate),
       vat: l.vat || '5%', net: lnNet, vatAmt: lnVat, total: r2(lnNet + lnVat), ...(p ? meta('warn') : {}),
     };
   });
-  const customerOk = !!resolve(L.customers, custLabel, (c) => c.code, d.customer);
-  const status = !d.customer ? 'Choose the customer in the strip above'
-    : !customerOk ? `Customer "${d.customer}" not found`
-    : problems[0] ?? (net > 0 ? 'Ready — press Ctrl+Enter (or Post) to post the invoice' : 'Type the invoice lines');
+  const cfg = DOC_CFG[k];
+  const partyOk = !!findParty(docParties(k, L), d.party);
+  const status = !d.party ? `Choose the ${cfg.party.toLowerCase()} in the strip above`
+    : !partyOk ? `${cfg.party} "${d.party}" not found`
+    : problems[0] ?? (net > 0 ? `Ready — press Ctrl+Enter (or ${cfg.postLabel})` : `Type the ${cfg.noun} lines`);
   rows.push({ description: 'Total', net: r2(net), vatAmt: r2(vat), total: r2(net + vat), _meta: { style: 'grand', formula: {} } });
-  rows.push({ description: status, ...meta(problems.length || (d.customer && !customerOk) ? 'warn' : 'muted') });
+  rows.push({ description: status, ...meta(problems.length || (d.party && !partyOk) ? 'warn' : 'muted') });
   return {
-    columns: INVOICE_COLUMNS, rows,
-    editable: (r: number, c: number) => r < INV_LINES && c < INV_KEYS.length,
-    onEdit: (r: number, c: number, value: string) => invoiceEdit(L, r, c, value),
-    optionsFor: (r: number, c: number) => (r >= INV_LINES ? undefined
-      : c === 0 ? L.items.map(itemLabel) : c === 2 ? revenueAccounts(L).map(acctLabel) : c === 5 ? ['5%', '0%'] : undefined),
+    columns: docColumns(k), rows,
+    editable: (r: number, c: number) => r < DOC_LINES && c < LINE_KEYS.length,
+    onEdit: (r: number, c: number, value: string) => docEdit(k, L, r, c, value),
+    optionsFor: (r: number, c: number) => (r >= DOC_LINES ? undefined
+      : c === 0 ? L.items.map(itemLabel) : c === 2 ? docAccounts(k, L).map(acctLabel) : c === 5 ? ['5%', '0%'] : undefined),
   };
 }
 
-function invoiceEdit(L: Lookups, r: number, c: number, value: string) {
-  const d = invoiceDraft.get();
-  const key = INV_KEYS[c];
-  if (!key || r >= INV_LINES) return;
+function docEdit(k: DocKind, L: Lookups, r: number, c: number, value: string) {
+  const d = docs[k].get();
+  const key = LINE_KEYS[c];
+  if (!key || r >= DOC_LINES) return;
   const line = { ...d.lines[r], [key]: key === 'qty' || key === 'rate' ? value.replace(/,/g, '') : value };
   if (key === 'vat') line.vat = value.trim() === '' ? '' : value.trim().startsWith('0') ? '0%' : '5%';
   if (key === 'item') {
-    const it = resolve(L.items, itemLabel, (i) => i.code, value);
+    const it = findItem(L, value);
     if (it) {
+      const sales = DOC_CFG[k].sales;
       line.item = itemLabel(it);
       line.description = line.description || it.name;
-      if (it.sellingPrice) line.rate = String(it.sellingPrice);
-      const acct = L.accounts.find((a) => a.id === it.salesAccountId);
+      const price = sales ? it.sellingPrice : it.costPrice;
+      if (price) line.rate = String(price);
+      const acct = L.accounts.find((a) => a.id === (sales ? it.salesAccountId : it.purchaseAccountId));
       if (acct && !line.account) line.account = acctLabel(acct);
       line.vat = vatFraction(it.vatRate) === 0 ? '0%' : '5%';
       if (!line.qty) line.qty = '1';
     }
   }
-  if (key === 'account') {
-    const a = resolve(revenueAccounts(L), acctLabel, (x) => x.code, value);
-    if (a) line.account = acctLabel(a);
-  }
-  invoiceDraft.set({ ...d, lines: d.lines.map((l, i) => (i === r ? line : l)) });
+  if (key === 'account') { const a = findAcct(docAccounts(k, L), value); if (a) line.account = acctLabel(a); }
+  docs[k].set({ ...d, lines: d.lines.map((l, i) => (i === r ? line : l)) });
 }
 
-export async function postInvoice(L: Lookups | undefined, companyId: number, defaultDate: string, asDraft: boolean): Promise<{ ok: boolean; msg: string }> {
-  if (!L) return { ok: false, msg: 'Lists are still loading.' };
-  const d = invoiceDraft.get();
-  const cust = resolve(L.customers, custLabel, (c) => c.code, d.customer);
-  if (!cust) return { ok: false, msg: d.customer ? `Customer "${d.customer}" not found.` : 'Choose the customer first.' };
+async function postDoc(k: DocKind, L: Lookups, companyId: number, defaultDate: string, asDraft: boolean) {
+  const d = docs[k].get();
+  const cfg = DOC_CFG[k];
+  const party = findParty(docParties(k, L), d.party);
+  if (!party) return { ok: false, msg: d.party ? `${cfg.party} "${d.party}" not found.` : `Choose the ${cfg.party.toLowerCase()} first.` };
   const used = d.lines.map((l, i) => ({ l, i })).filter(({ l }) => hasContent(l));
-  if (!used.length) return { ok: false, msg: 'Type at least one invoice line.' };
-  for (const { l, i } of used) { const p = lineProblem(L, l); if (p) return { ok: false, msg: `Line ${i + 1}: ${p}.` }; }
+  if (!used.length) return { ok: false, msg: `Type at least one ${cfg.noun} line.` };
+  for (const { l, i } of used) { const p = lineProblem(k, L, l); if (p) return { ok: false, msg: `Line ${i + 1}: ${p}.` }; }
+  const date = d.date || defaultDate;
+  const lines = used.map(({ l }) => {
+    const it = l.item ? findItem(L, l.item) : undefined;
+    const acctId = findAcct(docAccounts(k, L), l.account)!.id;
+    const base = { description: l.description || it?.name || 'Item', costCenterId: null, quantity: num(l.qty), unitPrice: num(l.rate), vatRate: vatOf(l.vat) };
+    return cfg.sales ? { ...base, revenueAccountId: acctId, ...(k === 'invoice-entry' ? { itemId: it?.id ?? null } : {}) } : { ...base, expenseAccountId: acctId };
+  });
   try {
-    const res = await api.post<{ number: string }>('/sales-invoices', {
-      customerId: cust.id, date: d.date || defaultDate, narration: d.narration || null, draft: asDraft,
-      lines: used.map(({ l }) => {
-        const it = l.item ? resolve(L.items, itemLabel, (x) => x.code, l.item) : undefined;
-        return {
-          description: l.description || it?.name || 'Item', revenueAccountId: resolve(revenueAccounts(L), acctLabel, (a) => a.code, l.account)!.id,
-          costCenterId: null, quantity: num(l.qty), unitPrice: num(l.rate), vatRate: vatOf(l.vat), itemId: it?.id ?? null,
-        };
-      }),
-    }, companyId);
-    invoiceDraft.reset();
-    return { ok: true, msg: `${asDraft ? 'Saved draft' : 'Posted'} ${res.number} for ${cust.name}${asDraft ? ' — submit/approve/post it from the Sales Invoice sheet' : ' — GL voucher posted by C-ERP'}` };
+    let res: { number: string };
+    if (k === 'invoice-entry') {
+      res = await api.post('/sales-invoices', { customerId: party.id, date, narration: d.narration || null, draft: asDraft, lines }, companyId);
+    } else if (k === 'quote-entry') {
+      const validUntil = d.validUntil || new Date(Date.parse(date) + 30 * 86_400_000).toISOString().slice(0, 10);
+      if (validUntil < date) return { ok: false, msg: 'Valid-until can\'t be before the quotation date.' };
+      res = await api.post('/estimates', { customerId: party.id, date, validUntil, narration: d.narration || null, lines }, companyId);
+    } else {
+      res = await api.post('/purchase-invoices', { vendorId: party.id, vendorRef: d.reference || null, date, narration: d.narration || null, lines }, companyId);
+    }
+    docs[k].reset();
+    const what = k === 'quote-entry' ? `Saved quotation ${res.number} for ${party.name} — nothing posts until it's converted to an invoice`
+      : asDraft ? `Saved draft ${res.number} for ${party.name} — submit/approve/post it from the Sales Invoice sheet`
+      : `Posted ${res.number} for ${party.name} — GL voucher posted by C-ERP`;
+    return { ok: true, msg: what };
   } catch (e) {
     return { ok: false, msg: e instanceof Error ? e.message : String(e) };
   }
 }
 
-export function InvoiceEntryHeader({ L, defaultDate, onPost }: { L: Lookups | undefined; defaultDate: string; onPost: (draft: boolean) => void }) {
-  const d = invoiceDraft.useValue();
-  const cust = L ? resolve(L.customers, custLabel, (c) => c.code, d.customer) : undefined;
+function DocHeader({ k, L, defaultDate, onPost }: { k: DocKind; L: Lookups | undefined; defaultDate: string; onPost: (draft: boolean) => void }) {
+  const d = docs[k].get();
+  const cfg = DOC_CFG[k];
+  const set = (patch: Partial<DocDraft>) => docs[k].set({ ...docs[k].get(), ...patch });
+  const party = L ? findParty(docParties(k, L), d.party) : undefined;
   const date = d.date || defaultDate;
-  const due = cust ? new Date(Date.parse(date) + cust.paymentTermsDays * 86_400_000).toISOString().slice(0, 10) : '';
+  const due = party?.paymentTermsDays != null ? new Date(Date.parse(date) + party.paymentTermsDays * 86_400_000).toISOString().slice(0, 10) : '';
+  const validUntil = d.validUntil || (isDate(date) ? new Date(Date.parse(date) + 30 * 86_400_000).toISOString().slice(0, 10) : '');
   return (
     <div className="entry-header">
-      <label style={{ minWidth: 280 }}>Customer
-        <Combo value={d.customer} placeholder="Type name or code…" options={L?.customers.map(custLabel) ?? []} onChange={(v) => invoiceDraft.set({ ...invoiceDraft.get(), customer: v })} />
-        {cust && <span className="picked">{cust.paymentTermsDays}-day terms · due {due}</span>}
+      <label style={{ minWidth: 280 }}>{cfg.party}
+        <Combo value={d.party} placeholder="Type name or code…" options={L ? docParties(k, L).map(partyLabel) : []} onChange={(v) => set({ party: v })} />
+        {party && k === 'invoice-entry' && <span className="picked">{party.paymentTermsDays}-day terms · due {due}</span>}
       </label>
-      <label>Date <input type="date" value={date} onChange={(e) => invoiceDraft.set({ ...invoiceDraft.get(), date: e.target.value })} /></label>
-      <label className="grow">Narration <input value={d.narration} placeholder="Optional" onChange={(e) => invoiceDraft.set({ ...invoiceDraft.get(), narration: e.target.value })} /></label>
-      <span className="hint">Type in the cells · Tab moves · Ctrl+Enter posts</span>
-      <button className="btn ghost" onClick={() => invoiceDraft.reset()}>Clear</button>
-      <button className="btn ghost" onClick={() => onPost(true)}>Save draft</button>
-      <button className="btn primary" onClick={() => onPost(false)}>Post invoice</button>
+      <label>Date <input type="date" value={date} onChange={(e) => set({ date: e.target.value })} /></label>
+      {k === 'quote-entry' && <label>Valid until <input type="date" value={validUntil} onChange={(e) => set({ validUntil: e.target.value })} /></label>}
+      {k === 'bill-entry' && <label>Vendor invoice no. <input value={d.reference} onChange={(e) => set({ reference: e.target.value })} /></label>}
+      <label className="grow">Narration <input value={d.narration} placeholder="Optional" onChange={(e) => set({ narration: e.target.value })} /></label>
+      <span className="hint">Type in the cells · Tab moves · Ctrl+Enter {k === 'quote-entry' ? 'saves' : 'posts'}</span>
+      <button className="btn ghost" onClick={() => docs[k].reset()}>Clear</button>
+      {cfg.canDraft && <button className="btn ghost" onClick={() => onPost(true)}>Save draft</button>}
+      <button className="btn primary" onClick={() => onPost(false)}>{cfg.postLabel}</button>
     </div>
   );
 }
 
-// ================================================================ RECEIPT BATCH
+// ================================================================ SETTLEMENT BATCHES (receipts / payments)
 
-interface RcptRow { customer: string; date: string; invoice: string; amount: string; mode: string; reference: string; bank: string; result?: string; state?: 'posted' | 'error' }
-const blankRcpt = (): RcptRow => ({ customer: '', date: '', invoice: '', amount: '', mode: '', reference: '', bank: '' });
-export const receiptBatch = createStore<RcptRow[]>(() => Array.from({ length: 15 }, blankRcpt));
-
-export interface OpenInvoice { invoiceId: number; customerCode: string; customerName: string; invoiceNo: string; dueDate: string; amountDue: number }
+type SettleKind = 'receipt-batch' | 'payment-batch';
+interface SettleRow { party: string; date: string; doc: string; amount: string; mode: string; reference: string; bank: string; result?: string; state?: 'posted' | 'error' }
+const blankSettle = (): SettleRow => ({ party: '', date: '', doc: '', amount: '', mode: '', reference: '', bank: '' });
+const settles: Record<SettleKind, ReturnType<typeof store<SettleRow[]>>> = {
+  'receipt-batch': store(() => Array.from({ length: 15 }, blankSettle)),
+  'payment-batch': store(() => Array.from({ length: 15 }, blankSettle)),
+};
+/** An unpaid invoice (receipts) or bill (payments), normalised from the API. */
+export interface OpenDoc { id: number; partyCode: string; no: string; dueDate: string; due: number }
+const SETTLE_CFG = {
+  'receipt-batch': { party: 'Customer', doc: 'Against Invoice', bank: 'Deposit To', path: '/receipts', noun: 'receipt' },
+  'payment-batch': { party: 'Vendor', doc: 'Against Bill', bank: 'Paid From', path: '/vendor-payments', noun: 'payment' },
+} as const;
 const MODES = ['BankTransfer', 'Cash', 'Cheque', 'Card', 'PostDatedCheque', 'Other'];
-const invLabel = (o: OpenInvoice) => `${o.invoiceNo} · due ${o.dueDate} · ${money(o.amountDue)}`;
-
-export const RECEIPT_COLUMNS: Col[] = [
-  t('customer', 'Customer (type to search)', 230), t('date', 'Date', 100), t('invoice', 'Against Invoice', 260), m('outstanding', 'Outstanding', 110),
-  m('amount', 'Amount', 110), t('mode', 'Mode', 120), t('reference', 'Reference / Cheque', 140), t('bank', 'Deposit To', 210), t('result', 'Result', 280),
+const modeLabel = (x: string) => x.replace(/([a-z])([A-Z])/g, '$1 $2');
+const docLabel = (o: OpenDoc) => `${o.no} · due ${o.dueDate} · ${money(o.due)}`;
+const settleColumns = (k: SettleKind): Col[] => [
+  t('party', `${SETTLE_CFG[k].party} (type to search)`, 230), t('date', 'Date', 100), t('doc', SETTLE_CFG[k].doc, 260), m('outstanding', 'Outstanding', 110),
+  m('amount', 'Amount', 110), t('mode', 'Mode', 120), t('reference', 'Reference / Cheque', 140), t('bank', SETTLE_CFG[k].bank, 210), t('result', 'Result', 280),
 ];
-const R_KEYS: (keyof RcptRow | null)[] = ['customer', 'date', 'invoice', null, 'amount', 'mode', 'reference', 'bank', null];
-const rowEmpty = (x: RcptRow) => !x.customer && !x.amount && !x.invoice;
+const S_KEYS: (keyof SettleRow | null)[] = ['party', 'date', 'doc', null, 'amount', 'mode', 'reference', 'bank', null];
+const settleParties = (k: SettleKind, L: Lookups): Party[] => (k === 'receipt-batch' ? L.customers : L.vendors);
+const findDoc = (open: OpenDoc[], text: string) => open.find((o) => docLabel(o) === text || o.no.toLowerCase() === text.trim().toLowerCase().split(' ')[0]);
 
-function rcptCheck(L: Lookups, open: OpenInvoice[], x: RcptRow) {
-  const cust = resolve(L.customers, custLabel, (c) => c.code, x.customer);
-  if (!cust) return { error: x.customer ? `customer "${x.customer}" not found` : 'choose a customer' };
-  const inv = x.invoice ? open.find((o) => invLabel(o) === x.invoice || o.invoiceNo.toLowerCase() === x.invoice.trim().toLowerCase().split(' ')[0]) : undefined;
-  if (x.invoice && !inv) return { error: `invoice "${x.invoice}" isn't open for this customer` };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(x.date)) return { error: 'date must be YYYY-MM-DD' };
+function settleCheck(k: SettleKind, L: Lookups, open: OpenDoc[], x: SettleRow) {
+  const party = findParty(settleParties(k, L), x.party);
+  if (!party) return { error: x.party ? `${SETTLE_CFG[k].party.toLowerCase()} "${x.party}" not found` : `choose a ${SETTLE_CFG[k].party.toLowerCase()}` };
+  const doc = x.doc ? findDoc(open.filter((o) => o.partyCode === party.code), x.doc) : undefined;
+  if (x.doc && !doc) return { error: `"${x.doc}" isn't open for this ${SETTLE_CFG[k].party.toLowerCase()}` };
+  if (!isDate(x.date)) return { error: 'date must be YYYY-MM-DD' };
   if (num(x.amount) <= 0) return { error: 'enter the amount' };
-  const bank = resolve(L.bankAccounts, acctLabel, (b) => b.code, x.bank);
+  const bank = findAcct(L.bankAccounts, x.bank);
   if (!bank) return { error: 'choose the bank/cash account' };
   if (!MODES.includes(x.mode)) return { error: 'choose a payment mode' };
-  return { cust, inv, bank };
+  return { party, doc, bank };
 }
 
-export function receiptView(L: Lookups | undefined, open: OpenInvoice[] | undefined, rowsIn: RcptRow[]) {
-  if (!L || !open) return { columns: RECEIPT_COLUMNS, rows: [{ customer: 'Loading customers and open invoices…', ...meta('muted') }] as Row[] };
+// ================================================================ EXPENSE BATCH
+
+interface ExpRow { date: string; vendor: string; description: string; account: string; amount: string; vat: string; bank: string; reference: string; result?: string; state?: 'posted' | 'error' }
+const blankExp = (): ExpRow => ({ date: '', vendor: '', description: '', account: '', amount: '', vat: '', bank: '', reference: '' });
+const expenses = store(() => Array.from({ length: 15 }, blankExp));
+const EXPENSE_COLUMNS: Col[] = [
+  t('date', 'Date', 100), t('vendor', 'Vendor (optional)', 200), t('description', 'Description', 230), t('account', 'Expense Account', 220),
+  m('amount', 'Amount (net)', 110), t('vat', 'VAT', 56), m('gross', 'Total', 100), t('bank', 'Paid From', 200), t('reference', 'Reference', 120), t('result', 'Result', 260),
+];
+const E_KEYS: (keyof ExpRow | null)[] = ['date', 'vendor', 'description', 'account', 'amount', 'vat', null, 'bank', 'reference', null];
+
+function expCheck(L: Lookups, x: ExpRow) {
+  if (!isDate(x.date)) return { error: 'date must be YYYY-MM-DD' };
+  const vendor = x.vendor ? findParty(L.vendors, x.vendor) : undefined;
+  if (x.vendor && !vendor) return { error: `vendor "${x.vendor}" not found` };
+  const account = findAcct(costAccounts(L), x.account);
+  if (!account) return { error: 'choose an expense account' };
+  if (num(x.amount) <= 0) return { error: 'enter the amount' };
+  const bank = findAcct(L.bankAccounts, x.bank);
+  if (!bank) return { error: 'choose the bank/cash account' };
+  return { vendor, account, bank };
+}
+
+// ================================================================ shared batch rendering + posting
+
+let defaultDate = '';
+type BatchKind = SettleKind | 'expense-batch';
+
+function batchStatus(state: string | undefined, result: string | undefined, err: string | undefined) {
+  return state === 'posted' ? `✓ Posted ${result}` : state === 'error' ? `⚠ ${result}` : err ? `… ${err}` : 'Ready';
+}
+
+function settleView(k: SettleKind, L: Lookups, open: OpenDoc[]) {
+  const rowsIn = settles[k].get();
   let total = 0, ready = 0;
   const rows: Row[] = rowsIn.map((x) => {
-    if (rowEmpty(x)) return { customer: '', date: '', invoice: '', mode: '', reference: '', bank: '', result: '' };
-    const chk = rcptCheck(L, open, x);
-    const inv = 'inv' in chk ? chk.inv : undefined;
-    const result = x.state === 'posted' ? `✓ Posted ${x.result}` : x.state === 'error' ? `⚠ ${x.result}` : 'error' in chk ? `… ${chk.error}` : 'Ready';
-    if (x.state === 'posted' || !('error' in chk)) total += num(x.amount);
-    if (!x.state && !('error' in chk)) ready++;
+    if (!x.party && !x.amount && !x.doc) return { party: '', date: '', doc: '', mode: '', reference: '', bank: '', result: '' };
+    const chk = settleCheck(k, L, open, x);
+    const err = 'error' in chk ? chk.error : undefined;
+    if (x.state === 'posted' || !err) total += num(x.amount);
+    if (!x.state && !err) ready++;
     return {
-      customer: x.customer, date: x.date, invoice: x.invoice, outstanding: inv?.amountDue, amount: x.amount === '' ? undefined : num(x.amount),
-      mode: x.mode.replace(/([a-z])([A-Z])/g, '$1 $2'), reference: x.reference, bank: x.bank, result,
+      party: x.party, date: x.date, doc: x.doc, outstanding: 'doc' in chk ? chk.doc?.due : undefined, amount: x.amount === '' ? undefined : num(x.amount),
+      mode: modeLabel(x.mode), reference: x.reference, bank: x.bank, result: batchStatus(x.state, x.result, err),
       ...(x.state === 'posted' ? meta('muted') : x.state === 'error' ? meta('warn') : {}),
     };
   });
-  rows.push({ invoice: `Total (${ready} ready to post)`, amount: r2(total), _meta: { style: 'grand', formula: {} } });
+  rows.push({ doc: `Total (${ready} ready to post)`, amount: r2(total), _meta: { style: 'grand', formula: {} } });
   return {
-    columns: RECEIPT_COLUMNS, rows, ready,
-    editable: (r: number, c: number) => r < rowsIn.length && R_KEYS[c] != null && rowsIn[r].state !== 'posted',
-    onEdit: (r: number, c: number, value: string) => receiptEdit(L, open, r, c, value),
+    columns: settleColumns(k), rows, ready,
+    editable: (r: number, c: number) => r < rowsIn.length && S_KEYS[c] != null && rowsIn[r].state !== 'posted',
+    onEdit: (r: number, c: number, value: string) => settleEdit(k, L, open, r, c, value),
     optionsFor: (r: number, c: number) => {
       if (r >= rowsIn.length) return undefined;
-      if (c === 0) return L.customers.map(custLabel);
-      if (c === 2) {
-        const cust = resolve(L.customers, custLabel, (x) => x.code, rowsIn[r].customer);
-        return open.filter((o) => !cust || o.customerCode === cust.code).map(invLabel);
-      }
-      if (c === 5) return MODES.map((x) => x.replace(/([a-z])([A-Z])/g, '$1 $2'));
+      if (c === 0) return settleParties(k, L).map(partyLabel);
+      if (c === 2) { const p = findParty(settleParties(k, L), rowsIn[r].party); return open.filter((o) => !p || o.partyCode === p.code).map(docLabel); }
+      if (c === 5) return MODES.map(modeLabel);
       if (c === 7) return L.bankAccounts.map(acctLabel);
       return undefined;
     },
   };
 }
 
-let defaultReceiptDate = '';
-export const setReceiptDefaultDate = (d: string) => { defaultReceiptDate = d; };
-
-function receiptEdit(L: Lookups, open: OpenInvoice[], r: number, c: number, value: string) {
-  const rows = receiptBatch.get();
-  const key = R_KEYS[c];
+function settleEdit(k: SettleKind, L: Lookups, open: OpenDoc[], r: number, c: number, value: string) {
+  const rows = settles[k].get();
+  const key = S_KEYS[c];
   if (!key) return;
-  const x: RcptRow = { ...rows[r], [key]: key === 'amount' ? value.replace(/,/g, '') : value, state: undefined, result: undefined };
-  if (key === 'customer') {
-    const cust = resolve(L.customers, custLabel, (cc) => cc.code, value);
-    if (cust) x.customer = custLabel(cust);
-    if (!x.date) x.date = defaultReceiptDate;
+  const x: SettleRow = { ...rows[r], [key]: key === 'amount' ? value.replace(/,/g, '') : value, state: undefined, result: undefined };
+  if (key === 'party') {
+    const p = findParty(settleParties(k, L), value);
+    if (p) x.party = partyLabel(p);
+    if (!x.date) x.date = defaultDate;
     if (!x.mode) x.mode = 'BankTransfer';
-    if (!x.bank && L.bankAccounts[0]) x.bank = acctLabel(L.bankAccounts[0] as Bank);
+    if (!x.bank && L.bankAccounts[0]) x.bank = acctLabel(L.bankAccounts[0]);
   }
   if (key === 'mode') x.mode = MODES.find((md) => md.toLowerCase() === value.replace(/\s/g, '').toLowerCase()) ?? value;
-  if (key === 'bank') { const b = resolve(L.bankAccounts, acctLabel, (bb) => bb.code, value); if (b) x.bank = acctLabel(b); }
-  if (key === 'invoice') {
-    const inv = open.find((o) => invLabel(o) === value || o.invoiceNo.toLowerCase() === value.trim().toLowerCase().split(' ')[0]);
-    if (inv) { x.invoice = invLabel(inv); if (!x.amount) x.amount = String(inv.amountDue); }
-  }
-  receiptBatch.set(rows.map((y, i) => (i === r ? x : y)));
+  if (key === 'bank') { const b = findAcct(L.bankAccounts, value); if (b) x.bank = acctLabel(b); }
+  if (key === 'doc') { const o = findDoc(open, value); if (o) { x.doc = docLabel(o); if (!x.amount) x.amount = String(o.due); } }
+  settles[k].set(rows.map((y, i) => (i === r ? x : y)));
 }
 
-/** Posts every ready row in order; each row records its own receipt number or error. */
-export async function postReceiptBatch(L: Lookups | undefined, open: OpenInvoice[] | undefined, companyId: number): Promise<{ ok: boolean; msg: string }> {
-  if (!L || !open) return { ok: false, msg: 'Lists are still loading.' };
+function expView(L: Lookups) {
+  const rowsIn = expenses.get();
+  let total = 0, ready = 0;
+  const rows: Row[] = rowsIn.map((x) => {
+    if (!x.vendor && !x.description && !x.amount && !x.account) return { date: '', vendor: '', description: '', account: '', vat: '', bank: '', reference: '', result: '' };
+    const chk = expCheck(L, x);
+    const err = 'error' in chk ? chk.error : undefined;
+    const gross = r2(num(x.amount) * (1 + vatOf(x.vat)));
+    if (x.state === 'posted' || !err) total += gross;
+    if (!x.state && !err) ready++;
+    return {
+      date: x.date, vendor: x.vendor, description: x.description, account: x.account, amount: x.amount === '' ? undefined : num(x.amount),
+      vat: x.vat || '5%', gross, bank: x.bank, reference: x.reference, result: batchStatus(x.state, x.result, err),
+      ...(x.state === 'posted' ? meta('muted') : x.state === 'error' ? meta('warn') : {}),
+    };
+  });
+  rows.push({ description: `Total (${ready} ready to post)`, gross: r2(total), _meta: { style: 'grand', formula: {} } });
+  return {
+    columns: EXPENSE_COLUMNS, rows, ready,
+    editable: (r: number, c: number) => r < rowsIn.length && E_KEYS[c] != null && rowsIn[r].state !== 'posted',
+    onEdit: (r: number, c: number, value: string) => expEdit(L, r, c, value),
+    optionsFor: (r: number, c: number) => (r >= rowsIn.length ? undefined
+      : c === 1 ? L.vendors.map(partyLabel) : c === 3 ? costAccounts(L).map(acctLabel) : c === 5 ? ['5%', '0%'] : c === 7 ? L.bankAccounts.map(acctLabel) : undefined),
+  };
+}
+
+function expEdit(L: Lookups, r: number, c: number, value: string) {
+  const rows = expenses.get();
+  const key = E_KEYS[c];
+  if (!key) return;
+  const x: ExpRow = { ...rows[r], [key]: key === 'amount' ? value.replace(/,/g, '') : value, state: undefined, result: undefined };
+  // first touch of a row fills the date and bank so a row is one or two cells of typing
+  if (!x.date) x.date = defaultDate;
+  if (!x.bank && L.bankAccounts[0]) x.bank = acctLabel(L.bankAccounts[0]);
+  if (key === 'vendor') { const v = findParty(L.vendors, value); if (v) x.vendor = partyLabel(v); }
+  if (key === 'account') { const a = findAcct(costAccounts(L), value); if (a) x.account = acctLabel(a); }
+  if (key === 'bank') { const b = findAcct(L.bankAccounts, value); if (b) x.bank = acctLabel(b); }
+  if (key === 'vat') x.vat = value.trim() === '' ? '' : value.trim().startsWith('0') ? '0%' : '5%';
+  expenses.set(rows.map((y, i) => (i === r ? x : y)));
+}
+
+async function postBatch(k: BatchKind, L: Lookups, open: OpenDoc[], companyId: number) {
   let posted = 0, failed = 0;
-  const rows = receiptBatch.get();
-  for (let i = 0; i < rows.length; i++) {
-    const x = receiptBatch.get()[i];
-    if (rowEmpty(x) || x.state === 'posted') continue;
-    const chk = rcptCheck(L, open, x);
-    if ('error' in chk) continue; // not ready — left as is, the Result column says why
+  const st = k === 'expense-batch' ? expenses : settles[k];
+  const count = st.get().length;
+  for (let i = 0; i < count; i++) {
+    const x = st.get()[i] as SettleRow & ExpRow;
+    if (x.state === 'posted') continue;
+    let body: unknown, path: string;
+    if (k === 'expense-batch') {
+      if (!x.vendor && !x.description && !x.amount && !x.account) continue;
+      const chk = expCheck(L, x);
+      if ('error' in chk) continue;
+      path = '/expenses';
+      body = { vendorId: chk.vendor?.id ?? null, customerId: null, date: x.date, bankAccountId: chk.bank!.id, reference: x.reference || null,
+        narration: x.description || 'Direct expense', payLater: false,
+        lines: [{ expenseAccountId: chk.account!.id, costCenterId: null, description: x.description || null, amount: num(x.amount), itemId: null, vatRate: vatOf(x.vat) }] };
+    } else {
+      if (!x.party && !x.amount && !x.doc) continue;
+      const chk = settleCheck(k, L, open, x);
+      if ('error' in chk) continue;
+      path = SETTLE_CFG[k].path;
+      body = { partyId: chk.party!.id, invoiceId: chk.doc?.id ?? null, date: x.date, bankAccountId: chk.bank!.id, amount: num(x.amount),
+        narration: null, paymentMode: x.mode, referenceNo: x.reference || null };
+    }
     try {
-      const res = await api.post<{ number: string }>('/receipts', {
-        partyId: chk.cust!.id, invoiceId: chk.inv?.invoiceId ?? null, date: x.date, bankAccountId: chk.bank!.id, amount: num(x.amount),
-        narration: null, paymentMode: x.mode, referenceNo: x.reference || null,
-      }, companyId);
-      receiptBatch.set(receiptBatch.get().map((y, j) => (j === i ? { ...y, state: 'posted', result: res.number } : y)));
+      const res = await api.post<{ number: string }>(path, body, companyId);
+      st.set(st.get().map((y, j) => (j === i ? { ...y, state: 'posted', result: res.number } : y)) as never);
       posted++;
     } catch (e) {
-      receiptBatch.set(receiptBatch.get().map((y, j) => (j === i ? { ...y, state: 'error', result: e instanceof Error ? e.message : String(e) } : y)));
+      st.set(st.get().map((y, j) => (j === i ? { ...y, state: 'error', result: e instanceof Error ? e.message : String(e) } : y)) as never);
       failed++;
     }
   }
-  if (!posted && !failed) return { ok: false, msg: 'No ready rows — fill customer, date, amount, mode and bank (the Result column says what\'s missing).' };
-  return { ok: failed === 0, msg: `Posted ${posted} receipt(s)${failed ? `, ${failed} failed — see the Result column` : ''}` };
+  const noun = k === 'expense-batch' ? 'expense' : SETTLE_CFG[k].noun;
+  if (!posted && !failed) return { ok: false, msg: `No ready rows — the Result column says what each row still needs.` };
+  return { ok: failed === 0, msg: `Posted ${posted} ${noun}(s)${failed ? `, ${failed} failed — see the Result column` : ''}` };
 }
 
-export function ReceiptBatchHeader({ ready, onPostAll }: { ready: number; onPostAll: () => void }) {
+/** The row store behind a batch sheet, typed loosely so the header's row tools work for every kind. */
+function batchRows(k: BatchKind) {
+  const st = (k === 'expense-batch' ? expenses : settles[k]) as unknown as { get: () => { state?: string }[]; set: (v: object[]) => void; reset: () => void };
+  const blank: () => object = k === 'expense-batch' ? blankExp : blankSettle;
+  return { st, blank };
+}
+
+function BatchHeader({ k, ready, onPostAll }: { k: BatchKind; ready: number; onPostAll: () => void }) {
+  const { st, blank } = batchRows(k);
+  const hint = k === 'expense-batch'
+    ? 'One expense per row · date & bank fill in · type the account (search) and amount · Ctrl+Enter posts all ready rows'
+    : `One ${SETTLE_CFG[k].noun} per row · type a ${SETTLE_CFG[k].party.toLowerCase()}, pick the ${k === 'receipt-batch' ? 'invoice' : 'bill'} (amount fills in) · Ctrl+Enter posts all ready rows`;
+  const noun = k === 'expense-batch' ? 'expense' : SETTLE_CFG[k].noun;
   return (
     <div className="entry-header">
-      <span className="hint">One receipt per row · type a customer, pick its invoice (amount fills in) · Tab moves · Ctrl+Enter posts all ready rows</span>
+      <span className="hint">{hint}</span>
       <span style={{ flex: 1 }} />
-      <button className="btn ghost" onClick={() => receiptBatch.set([...receiptBatch.get(), ...Array.from({ length: 10 }, blankRcpt)])}>+ 10 rows</button>
-      <button className="btn ghost" onClick={() => receiptBatch.set(receiptBatch.get().filter((x) => x.state !== 'posted').concat(Array.from({ length: 3 }, blankRcpt)))}>Clear posted</button>
-      <button className="btn ghost" onClick={() => receiptBatch.reset()}>Clear all</button>
-      <button className="btn primary" onClick={onPostAll}>Post {ready} ready receipt{ready === 1 ? '' : 's'}</button>
+      <button className="btn ghost" onClick={() => st.set([...st.get(), ...Array.from({ length: 10 }, blank)])}>+ 10 rows</button>
+      <button className="btn ghost" onClick={() => st.set([...st.get().filter((x) => x.state !== 'posted'), ...Array.from({ length: 3 }, blank)])}>Clear posted</button>
+      <button className="btn ghost" onClick={() => st.reset()}>Clear all</button>
+      <button className="btn primary" onClick={onPostAll}>Post {ready} ready {noun}{ready === 1 ? '' : 's'}</button>
     </div>
   );
 }
 
-export type { Account, Customer, Item };
+// ================================================================ public facade used by App
+
+export const ENTRY_SHEETS = ['invoice-entry', 'quote-entry', 'bill-entry', 'receipt-batch', 'payment-batch', 'expense-batch'] as const;
+export type EntryId = (typeof ENTRY_SHEETS)[number];
+export const isEntrySheet = (id: string): id is EntryId => (ENTRY_SHEETS as readonly string[]).includes(id);
+const isDoc = (id: EntryId): id is DocKind => id === 'invoice-entry' || id === 'quote-entry' || id === 'bill-entry';
+
+/** API list a batch sheet needs for its "against invoice/bill" column. */
+export const openDocsPath = (id: string) => (id === 'receipt-batch' ? '/outstanding-invoices' : id === 'payment-batch' ? '/purchase-invoices' : undefined);
+/** Normalise /outstanding-invoices or /purchase-invoices rows to OpenDoc. */
+export function toOpenDocs(id: string, data: unknown): OpenDoc[] | undefined {
+  if (!Array.isArray(data)) return undefined;
+  if (id === 'receipt-batch') return data.map((o) => ({ id: o.invoiceId, partyCode: o.customerCode, no: o.invoiceNo, dueDate: o.dueDate, due: o.amountDue }));
+  return data.filter((o) => o.balance > 0).map((o) => ({ id: o.invoiceId, partyCode: o.vendorCode, no: o.invoiceNo, dueDate: o.dueDate, due: o.balance }));
+}
+
+export function entryView(id: EntryId, L: Lookups | undefined, open: OpenDoc[] | undefined, today: string) {
+  defaultDate = today;
+  const loading = (msg: string) => ({ columns: [{ key: 'msg', label: 'Loading', width: 500 }] as Col[], rows: [{ msg, ...meta('muted') }] as Row[] });
+  if (!L) return loading('Loading lists…');
+  if (isDoc(id)) return docView(id, L);
+  if (id === 'expense-batch') return expView(L);
+  if (!open) return loading('Loading open documents…');
+  return settleView(id, L, open);
+}
+
+export async function postEntrySheet(id: EntryId, L: Lookups | undefined, open: OpenDoc[] | undefined, companyId: number, today: string, asDraft: boolean) {
+  if (!L) return { ok: false, msg: 'Lists are still loading.' };
+  if (isDoc(id)) return postDoc(id, L, companyId, today, asDraft);
+  if (id !== 'expense-batch' && !open) return { ok: false, msg: 'Open documents are still loading.' };
+  return postBatch(id, L, open ?? [], companyId);
+}
+
+export function EntryHeader({ id, L, today, ready, onPost }: { id: EntryId; L: Lookups | undefined; today: string; ready: number; onPost: (draft: boolean) => void }) {
+  useEntryStores();
+  return isDoc(id) ? <DocHeader k={id} L={L} defaultDate={today} onPost={onPost} /> : <BatchHeader k={id} ready={ready} onPostAll={() => onPost(false)} />;
+}

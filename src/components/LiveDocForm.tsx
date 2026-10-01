@@ -5,15 +5,17 @@ import { X } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, vatFraction, type Lookups } from '../api/client';
 
-export type LiveFormKind = 'sales-invoice' | 'purchase-invoice' | 'receipt' | 'payment' | 'expense' | 'customer' | 'vendor' | 'portal-access';
+export type LiveFormKind = 'sales-invoice' | 'purchase-invoice' | 'receipt' | 'payment' | 'expense' | 'customer' | 'vendor' | 'portal-access' | 'credit-note' | 'debit-note';
 
 const TITLES: Record<LiveFormKind, string> = {
   'sales-invoice': 'New Sales Invoice', 'purchase-invoice': 'New Purchase Invoice', receipt: 'New Receipt Voucher',
   payment: 'New Payment Voucher', expense: 'New Expense', customer: 'New Customer', vendor: 'New Vendor', 'portal-access': 'Grant Employee Portal Access',
+  'credit-note': 'New Credit Note (to customer)', 'debit-note': 'New Debit Note (to vendor)',
 };
 export const LIVE_TARGET: Record<LiveFormKind, string> = {
   'sales-invoice': 'sales-invoices', 'purchase-invoice': 'purchase-invoices', receipt: 'receipts', payment: 'payments',
   expense: 'expenses', customer: 'customers', vendor: 'vendors', 'portal-access': 'employees',
+  'credit-note': 'credit-notes', 'debit-note': 'debit-notes',
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -30,7 +32,11 @@ export function LiveDocForm({ kind, companyId, onClose, onDone, context, prefill
   const qc = useQueryClient();
   const lk = useLookups(companyId);
   const L = lk.data;
-  const sales = kind === 'sales-invoice' || kind === 'receipt';
+  const sales = kind === 'sales-invoice' || kind === 'receipt' || kind === 'credit-note';
+  const note = kind === 'credit-note' || kind === 'debit-note';
+  const revenueSide = kind === 'sales-invoice' || kind === 'credit-note';
+  const [reason, setReason] = useState('');
+  const [settle, setSettle] = useState('CreditOnAccount');
   const settlement = kind === 'receipt' || kind === 'payment';
   const master = kind === 'customer' || kind === 'vendor';
   const portal = kind === 'portal-access';
@@ -69,12 +75,12 @@ export function LiveDocForm({ kind, companyId, onClose, onDone, context, prefill
   const parties = (sales ? L?.customers : L?.vendors) ?? [];
   const revenueAccounts = useMemo(() => L?.accounts.filter((a) => a.type === 'Income') ?? [], [L]);
   const costAccounts = useMemo(() => L?.accounts.filter((a) => a.type === 'Expense' || a.type === 'Asset') ?? [], [L]);
-  const lineAccounts = kind === 'sales-invoice' ? revenueAccounts : costAccounts;
+  const lineAccounts = revenueSide ? revenueAccounts : costAccounts;
 
   const openDocs = useQuery({
     queryKey: ['open-docs', companyId, kind, party],
     queryFn: () => api.get<{ id: number; invoiceNo: string; outstanding: number; dueDate: string }[]>(`/${sales ? 'customers' : 'vendors'}/${party}/open-invoices`, companyId),
-    enabled: settlement && !!party,
+    enabled: (settlement || note) && !!party,
   });
   const chosenDoc = openDocs.data?.find((d) => String(d.id) === against);
 
@@ -88,8 +94,8 @@ export function LiveDocForm({ kind, companyId, onClose, onDone, context, prefill
   const pickItem = (i: number, id: string) => {
     const it = L?.items.find((x) => String(x.id) === id);
     if (!it) return setLine(i, { itemId: '' });
-    const acct = kind === 'sales-invoice' ? it.salesAccountId : it.purchaseAccountId;
-    setLine(i, { itemId: id, description: it.name, price: String(kind === 'sales-invoice' ? it.sellingPrice : it.costPrice ?? ''), accountId: acct ? String(acct) : lines[i].accountId, vat: String(vatFraction(it.vatRate)) });
+    const acct = revenueSide ? it.salesAccountId : it.purchaseAccountId;
+    setLine(i, { itemId: id, description: it.name, price: String(revenueSide ? it.sellingPrice : it.costPrice ?? ''), accountId: acct ? String(acct) : lines[i].accountId, vat: String(vatFraction(it.vatRate)) });
   };
 
   const submit = async () => {
@@ -118,7 +124,21 @@ export function LiveDocForm({ kind, companyId, onClose, onDone, context, prefill
         } else {
           const bad = lines.find((l) => !l.accountId);
           if (bad) throw new Error('Every line needs an account.');
-          if (kind === 'sales-invoice') {
+          if (kind === 'credit-note') {
+            if (!reason.trim()) throw new Error('Give a reason for the credit note.');
+            if (settle === 'ApplyToInvoice' && !against) throw new Error('Choose the invoice to apply the credit to.');
+            res = await api.post('/credit-notes', {
+              customerId: n(party), salesInvoiceId: against ? n(against) : null, date, reason, narration: narration || null,
+              lines: lines.map((l) => ({ description: l.description || 'Credit', revenueAccountId: n(l.accountId), costCenterId: null, quantity: n(l.qty), unitPrice: n(l.price), vatRate: Number(l.vat) })),
+              settlementMethod: settle, bankAccountId: settle === 'CashRefund' ? n(bank) : null,
+            }, companyId);
+          } else if (kind === 'debit-note') {
+            if (!reason.trim()) throw new Error('Give a reason for the debit note.');
+            res = await api.post('/debit-notes', {
+              vendorId: n(party), purchaseInvoiceId: against ? n(against) : null, date, reason, narration: narration || null,
+              lines: lines.map((l) => ({ description: l.description || 'Debit', expenseAccountId: n(l.accountId), costCenterId: null, quantity: n(l.qty), unitPrice: n(l.price), vatRate: Number(l.vat) })),
+            }, companyId);
+          } else if (kind === 'sales-invoice') {
             res = await api.post('/sales-invoices', { customerId: n(party), date, narration: narration || null, lines: lines.map((l) => ({ description: l.description || 'Item', revenueAccountId: n(l.accountId), costCenterId: null, quantity: n(l.qty), unitPrice: n(l.price), vatRate: Number(l.vat), itemId: l.itemId ? n(l.itemId) : null })) }, companyId);
           } else if (kind === 'purchase-invoice') {
             res = await api.post('/purchase-invoices', { vendorId: n(party), vendorRef: reference || null, date, narration: narration || null, lines: lines.map((l) => ({ description: l.description || 'Item', expenseAccountId: n(l.accountId), costCenterId: null, quantity: n(l.qty), unitPrice: n(l.price), vatRate: Number(l.vat) })) }, companyId);
@@ -185,6 +205,33 @@ export function LiveDocForm({ kind, companyId, onClose, onDone, context, prefill
                   </label>
                 )}
               </div>
+              {note && (
+                <div className="form-row">
+                  <label>{kind === 'credit-note' ? 'Against invoice' : 'Against bill'}
+                    <select value={against} onChange={(e) => setAgainst(e.target.value)} disabled={!party}>
+                      <option value="">{party ? '— not linked to one document —' : 'choose the party first'}</option>
+                      {(openDocs.data ?? []).map((d) => <option key={d.id} value={d.id}>{d.invoiceNo} — outstanding {money(d.outstanding)}</option>)}
+                    </select>
+                  </label>
+                  <label>Reason <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={kind === 'credit-note' ? 'e.g. Goods returned / price correction' : 'e.g. Damaged goods returned'} /></label>
+                  {kind === 'credit-note' && (
+                    <label>Settle by
+                      <select value={settle} onChange={(e) => setSettle(e.target.value)}>
+                        <option value="CreditOnAccount">Keep as credit on the customer's account</option>
+                        <option value="ApplyToInvoice">Reduce the selected invoice</option>
+                        <option value="CashRefund">Refund the customer (cash/bank)</option>
+                      </select>
+                    </label>
+                  )}
+                  {kind === 'credit-note' && settle === 'CashRefund' && (
+                    <label>Refund from
+                      <select value={bank} onChange={(e) => setBank(e.target.value)}>
+                        {L.bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.code} · {b.name}</option>)}
+                      </select>
+                    </label>
+                  )}
+                </div>
+              )}
               {settlement ? (
                 <div className="form-row">
                   <label>Allocate against
@@ -205,11 +252,11 @@ export function LiveDocForm({ kind, companyId, onClose, onDone, context, prefill
                 <>
                   <div className="form-row">
                     <label className="full">Narration <input value={narration} onChange={(e) => setNarration(e.target.value)} placeholder="Optional" /></label>
-                    {kind !== 'sales-invoice' && <label>{kind === 'expense' ? 'Reference' : 'Vendor invoice no.'} <input value={reference} onChange={(e) => setReference(e.target.value)} /></label>}
+                    {kind !== 'sales-invoice' && !note && <label>{kind === 'expense' ? 'Reference' : 'Vendor invoice no.'} <input value={reference} onChange={(e) => setReference(e.target.value)} /></label>}
                     {kind === 'expense' && <label className="check"><input type="checkbox" checked={payLater} onChange={(e) => setPayLater(e.target.checked)} /> Pay later</label>}
                   </div>
                   <table className="form-lines">
-                    <thead><tr><th>Item</th><th>Description</th><th>{kind === 'sales-invoice' ? 'Revenue account' : 'Expense account'}</th><th>Qty</th><th>Rate</th><th>VAT</th><th>Amount</th><th /></tr></thead>
+                    <thead><tr><th>Item</th><th>Description</th><th>{revenueSide ? 'Revenue account' : 'Expense account'}</th><th>Qty</th><th>Rate</th><th>VAT</th><th>Amount</th><th /></tr></thead>
                     <tbody>
                       {lines.map((l, i) => (
                         <tr key={i}>

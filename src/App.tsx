@@ -3,7 +3,7 @@ import {
   Save, Undo2, Redo2, ChevronDown, Lightbulb, Share2, X, Check, Plus, ChevronLeft, ChevronRight, Grid3x3, Columns3, PanelBottom, Minus,
   Copy, ArrowDownAZ, ArrowUpAZ, Funnel, Sigma, Download, Printer, FileText, HandCoins, FilePlus, Banknote, Receipt, NotebookPen,
   Car, Wallet, BadgeCheck, CalendarDays, ChevronUp, RefreshCw, LogOut, UserPlus, Building2, Mail, FileDown,
-  Warehouse, PackagePlus, PackageMinus, ArrowLeftRight, SlidersHorizontal, FileOutput, Layers, Factory, CircleCheck, CircleX, Briefcase, Truck, Route, Settings2,
+  FileMinus, FileX, Warehouse, PackagePlus, PackageMinus, ArrowLeftRight, SlidersHorizontal, FileOutput, Layers, Factory, CircleCheck, CircleX, Briefcase, Truck, Route, Settings2,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, sessionActions, useSession, type Lookups } from './api/client';
@@ -238,7 +238,7 @@ export default function App() {
     ],
     Finance: [{ group: 'Post', actions: [{ label: 'Post Voucher', icon: BadgeCheck, color: C.green, needs: 'post', run: () => postJv(), title: 'Post the journal voucher (Ctrl+Enter)' }] }],
     Receivables: [
-      { group: 'New', actions: [{ label: 'New Invoice', icon: FileText, color: C.green, ...newDoc('sales-invoice') }, { label: 'New Receipt', icon: HandCoins, color: C.green, ...newDoc('receipt') }, { label: 'New Customer', icon: UserPlus, color: C.blue, needs: 'post', run: () => setLiveForm('customer') }] },
+      { group: 'New', actions: [{ label: 'New Invoice', icon: FileText, color: C.green, ...newDoc('sales-invoice') }, { label: 'New Receipt', icon: HandCoins, color: C.green, ...newDoc('receipt') }, { label: 'New Credit Note', icon: FileMinus, color: C.red, needs: 'post', run: () => setLiveForm('credit-note') }, { label: 'New Customer', icon: UserPlus, color: C.blue, needs: 'post', run: () => setLiveForm('customer') }] },
       { group: 'Documents', actions: [
         { label: 'Print Invoice', icon: Printer, color: C.gray, small: true, needs: 'live', run: () => printSelected('invoice', 'sales-invoices', 'sales invoice') },
         { label: 'Print Receipt', icon: Printer, color: C.gray, small: true, needs: 'live', run: () => printSelected('receipt', 'receipts', 'receipt') },
@@ -248,7 +248,7 @@ export default function App() {
         } },
       ] },
     ],
-    Payables: [{ group: 'New', actions: [{ label: 'New Bill', icon: FilePlus, color: C.orange, ...newDoc('purchase-invoice') }, { label: 'New Payment', icon: Banknote, color: C.orange, ...newDoc('payment') }, { label: 'New Expense', icon: Receipt, color: C.red, ...newDoc('expense') }, { label: 'New Vendor', icon: Building2, color: C.blue, needs: 'post', run: () => setLiveForm('vendor') }] }],
+    Payables: [{ group: 'New', actions: [{ label: 'New Bill', icon: FilePlus, color: C.orange, ...newDoc('purchase-invoice') }, { label: 'New Payment', icon: Banknote, color: C.orange, ...newDoc('payment') }, { label: 'New Expense', icon: Receipt, color: C.red, ...newDoc('expense') }, { label: 'New Debit Note', icon: FileX, color: C.red, needs: 'post', run: () => setLiveForm('debit-note') }, { label: 'New Vendor', icon: Building2, color: C.blue, needs: 'post', run: () => setLiveForm('vendor') }] }],
     Inventory: [
       { group: 'Stock In / Out', actions: [
         { label: 'Stock Receipt', icon: PackagePlus, color: C.green, needs: 'post', run: () => setModuleForm('receipt') },
@@ -369,7 +369,7 @@ export default function App() {
     if (n === 'admin' && !grant?.canAdminister) return 'Needs company administrator access';
     return null;
   };
-  const liveOnly = (label: string) => !live && (/^(New Customer|New Vendor|Send Reminder|WPS File|Approve Leave|Reject Leave|Portal Access|Configure Industry)$/.test(label) || ['Inventory', 'Manufacturing', 'Jobs'].includes(tab));
+  const liveOnly = (label: string) => !live && (/^(New Customer|New Vendor|New Credit Note|New Debit Note|Send Reminder|WPS File|Approve Leave|Reject Leave|Portal Access|Configure Industry)$/.test(label) || ['Inventory', 'Manufacturing', 'Jobs'].includes(tab));
   const ribbonExtra = (extra[tab] ?? []).map((g) => ({
     ...g,
     actions: g.actions.map((a) => {

@@ -44,6 +44,20 @@ const n = (v: unknown) => (v === '' || v == null ? null : Number(v));
 const opt = (x: string[]) => x.map((v) => ({ value: v, label: v.replace(/([a-z])([A-Z])/g, '$1 $2') }));
 
 export const MODULE_FORMS: Record<string, FormSpec> = {
+  item: {
+    title: 'New Item', path: () => '/items', target: 'items',
+    fields: [
+      { key: 'name', label: 'Item name', type: 'text', required: true, full: true },
+      { key: 'kind', label: 'Kind', type: 'select', options: opt(['Goods', 'Service']), required: true },
+      { key: 'unit', label: 'Unit', type: 'text', required: true },
+      { key: 'sellingPrice', label: 'Selling price', type: 'number', required: true }, { key: 'costPrice', label: 'Cost price', type: 'number' },
+      { key: 'salesAccountId', label: 'Sales (revenue) account', type: 'select', source: 'accounts', optional: '— none —' },
+      { key: 'purchaseAccountId', label: 'Purchase account', type: 'select', source: 'accounts', optional: '— none —' },
+    ],
+    initial: () => ({ kind: 'Goods', unit: 'Pcs', sellingPrice: '0' }),
+    body: (v) => ({ name: v.name, kind: v.kind, unit: v.unit, sellingPrice: n(v.sellingPrice) ?? 0, salesAccountId: n(v.salesAccountId), salesDescription: null, costPrice: n(v.costPrice), purchaseAccountId: n(v.purchaseAccountId), purchaseDescription: null, taxCodeId: null }),
+    done: (r) => `Created item ${r.code} ${r.name}`,
+  },
   warehouse: {
     title: 'New Warehouse', path: () => '/inventory/warehouses', target: 'warehouses',
     fields: [{ key: 'code', label: 'Code', type: 'text', required: true }, { key: 'name', label: 'Name', type: 'text', required: true }],

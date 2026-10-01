@@ -2,9 +2,10 @@
 // Field names are the camelCased C-ERP read models / DTOs from server/Asco.Api/ReadEndpoints.cs.
 import type { Col, Row, RowMeta } from './registry';
 import { REPORT_LIVE } from './reportsLive';
+import { REPORT_DATES, type DateMode, type DateState } from './reportDates';
 
 type J = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-export interface LiveSpec { path: string; columns: Col[]; rows?: (data: any) => Row[]; payroll?: boolean; admin?: boolean } // eslint-disable-line @typescript-eslint/no-explicit-any
+export interface LiveSpec { path: string; columns: Col[]; rows?: (data: any, dates: DateState) => Row[]; payroll?: boolean; admin?: boolean; dates?: DateMode } // eslint-disable-line @typescript-eslint/no-explicit-any
 
 const t = (key: string, label: string, width = 120): Col => ({ key, label, width });
 const m = (key: string, label: string, width = 110): Col => ({ key, label, width, type: 'money' });
@@ -398,3 +399,4 @@ export const LIVE: Record<string, LiveSpec> = {
 
 // Extra reports reachable from the Reports ▾ menu.
 Object.assign(LIVE, REPORT_LIVE);
+for (const [id, dm] of Object.entries(REPORT_DATES)) if (LIVE[id]) LIVE[id].dates = dm;

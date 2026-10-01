@@ -14,15 +14,17 @@ internal static class AuthEndpoints
     {
         var auth = app.MapGroup("/api/auth");
 
-        auth.MapPost("/login", async (LoginRequest req, SignInManager<AppUser> signIn, UserManager<AppUser> users) =>
+        auth.MapPost("/login", async (LoginRequest req, SignInManager<AppUser> signIn, UserManager<AppUser> users, HttpContext http, ILoggerFactory logs) =>
         {
+            var log = logs.CreateLogger("Asco.Auth");
+            var ip = http.Connection.RemoteIpAddress?.ToString();
             var user = await users.FindByEmailAsync(req.Email ?? "");
-            if (user is null) return Results.Problem("Invalid email or password.", statusCode: 401);
+            if (user is null) { log.LogWarning("Failed sign-in for unknown {Email} from {Ip}", req.Email, ip); return Results.Problem("Invalid email or password.", statusCode: 401); }
             // Employee-only logins are allowed: /me reports them as employees and the UI opens the
             // self-service portal; they hold no company grant, so every /api data endpoint refuses them.
             var result = await signIn.PasswordSignInAsync(user, req.Password ?? "", isPersistent: false, lockoutOnFailure: true);
-            if (result.IsLockedOut) return Results.Problem("Too many failed attempts — try again in 5 minutes.", statusCode: 423);
-            if (!result.Succeeded) return Results.Problem("Invalid email or password.", statusCode: 401);
+            if (result.IsLockedOut) { log.LogWarning("Locked-out sign-in for {Email} from {Ip}", req.Email, ip); return Results.Problem("Too many failed attempts — try again in 5 minutes.", statusCode: 423); }
+            if (!result.Succeeded) { log.LogWarning("Failed sign-in for {Email} from {Ip}", req.Email, ip); return Results.Problem("Invalid email or password.", statusCode: 401); }
             return Results.NoContent();
         }).RequireRateLimiting("login");
 

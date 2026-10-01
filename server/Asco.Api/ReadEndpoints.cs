@@ -261,10 +261,12 @@ internal static class ReadEndpoints
         reports.MapGet("/trial-balance", (LedgerService ledger, DateOnly? from, DateOnly? to) => ledger.GetTrialBalanceAsync(from ?? YearStart, to ?? Today));
         reports.MapGet("/profit-and-loss", (LedgerService ledger, DateOnly? from, DateOnly? to) => ledger.GetProfitAndLossAsync(from ?? YearStart, to ?? Today));
         reports.MapGet("/balance-sheet", (LedgerService ledger, DateOnly? asOf) => ledger.GetBalanceSheetAsync(asOf ?? Today));
-        reports.MapGet("/cash-flow", async (LedgerService ledger, ReportsService rpt, int? periodId) =>
+        // Cash flow is per fiscal period: by id, or the period containing `date` (the month picker).
+        reports.MapGet("/cash-flow", async (LedgerService ledger, ReportsService rpt, int? periodId, DateOnly? date) =>
         {
-            var id = periodId ?? (await ledger.GetDefaultPeriodAsync(Today))?.Id;
-            return id is int p ? Results.Ok(await rpt.GetCashFlowAsync(p)) : Results.Problem("No fiscal period covers today.", statusCode: 409);
+            var on = date ?? Today;
+            var id = periodId ?? (await ledger.GetPeriodsAsync()).FirstOrDefault(p => on >= p.StartDate && on <= p.EndDate)?.Id;
+            return id is int p ? Results.Ok(await rpt.GetCashFlowAsync(p)) : Results.Problem($"No fiscal period covers {on:MMM yyyy}.", statusCode: 409);
         });
         reports.MapGet("/segments", (ReportsService rpt, DateOnly? from, DateOnly? to) => rpt.GetSegmentPnlAsync(from ?? YearStart, to ?? Today));
         reports.MapGet("/customer-revenue", (ReportsService rpt, DateOnly? from, DateOnly? to) => rpt.GetCustomerRevenueAsync(from ?? YearStart, to ?? Today));

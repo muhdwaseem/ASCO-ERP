@@ -84,20 +84,21 @@ builder.Services.AddRateLimiter(o =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
 });
 builder.Services.AddResponseCompression(o => o.EnableForHttps = true);
+builder.AddAscoSecurity();
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+app.UseAscoSecurity();
+
 await DatabaseStartup.RunAsync(app);
+await Security.GuardPublishedPasswordsAsync(app);
 await app.EnsureModuleTablesAsync();
 
 app.UseResponseCompression();
 app.UseExceptionHandler();
 app.Use(async (ctx, next) =>
 {
-    ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
-    ctx.Response.Headers["X-Frame-Options"] = "DENY";
-    ctx.Response.Headers["Cache-Control"] = "no-store"; // financial data is never cached by browsers
     // CSRF guard for cookie auth: state-changing requests must carry a custom header, which a
     // cross-site form post cannot set without a CORS preflight (and we allow no cross-origin calls).
     if (!HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method)
@@ -109,8 +110,13 @@ app.Use(async (ctx, next) =>
     }
     await next();
 });
-app.UseRateLimiter();
+// Production: the built front end (npm run build → wwwroot) is served from the same origin as the API.
+// Static files go before routing, otherwise the SPA fallback route would answer /assets/* with index.html.
+var spa = Directory.Exists(Path.Combine(app.Environment.ContentRootPath, "wwwroot"));
+if (spa) { app.UseDefaultFiles(); app.UseStaticFiles(); }
+app.UseRouting();
 app.UseAuthentication();
+app.UseRateLimiter(); // after authentication, so the API budget is per signed-in user
 app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })); // load-balancer probe
@@ -120,6 +126,7 @@ app.MapWriteEndpoints();
 app.MapEssEndpoints();
 app.MapModuleEndpoints();
 app.MapAiEndpoints();
+if (spa) app.MapFallbackToFile("{*path:regex(^(?!api/).*$)}", "index.html"); // client-side routes, never /api
 
 app.Run();
 

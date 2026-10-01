@@ -3,6 +3,7 @@
 // Ranges are the calendar year to date unless the endpoint says otherwise.
 import type { Col, Row, RowMeta } from './registry';
 import type { LiveSpec } from './live';
+import type { DateState } from './reportDates';
 
 type J = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -35,7 +36,7 @@ function grouped(rows: J[], keyOf: (x: J) => string, order: string[] | null, lab
 
 const BUCKETS = ['Current (not yet due)', '1–30 days overdue', '31–60 days overdue', '61–90 days overdue', 'Over 90 days overdue'];
 const bucket = (days: number) => (days <= 0 ? BUCKETS[0] : days <= 30 ? BUCKETS[1] : days <= 60 ? BUCKETS[2] : days <= 90 ? BUCKETS[3] : BUCKETS[4]);
-const daysPast = (iso: string) => Math.floor((Date.now() - Date.parse(`${iso}T00:00:00`)) / 86_400_000);
+const daysPast = (iso: string, asOf?: string) => Math.floor(((asOf ? Date.parse(`${asOf}T00:00:00`) : Date.now()) - Date.parse(`${iso}T00:00:00`)) / 86_400_000);
 
 /** Sum documents per key (salesperson, month…), skipping drafts and voids. */
 function rollup(xs: J[], keyOf: (x: J) => string, labelKey: string) {
@@ -131,7 +132,8 @@ export const REPORT_LIVE: Record<string, LiveSpec> = {
   'rpt-ap-aging-details': {
     path: '/purchase-invoices',
     columns: [t('invoiceNo', 'Bill No', 140), d('date', 'Date'), d('dueDate', 'Due Date'), t('vendorName', 'Vendor', 240), n('daysOverdue', 'Days Overdue', 100), m('balance', 'Balance Due', 130)],
-    rows: (xs: J[]) => { const open = xs.filter((x) => x.balance > 0).map((x) => ({ ...x, daysOverdue: Math.max(0, daysPast(x.dueDate)) })); return [...grouped(open, (x) => bucket(daysPast(x.dueDate)), BUCKETS, 'invoiceNo', ['balance']), totalRow(open, 'invoiceNo', ['balance'], 'Total payable')]; },
+    // Balances are today's; bills dated after the as-of date are left out and ageing counts to that date.
+    rows: (xs: J[], ds: DateState) => { const open = xs.filter((x) => x.balance > 0).map((x) => ({ ...x, daysOverdue: Math.max(0, daysPast(x.dueDate, ds.asOf)) })); return [...grouped(open, (x) => bucket(daysPast(x.dueDate, ds.asOf)), BUCKETS, 'invoiceNo', ['balance']), totalRow(open, 'invoiceNo', ['balance'], `Total payable as of ${ds.asOf}`)]; },
   },
 
   // ── Purchases & expenses ──────────────────────────────────────────────
@@ -165,9 +167,9 @@ export const REPORT_LIVE: Record<string, LiveSpec> = {
       { name: `Tax period ${x.from} to ${x.to} — from posted invoices, bills, expenses and credit/debit notes`, ...meta('muted') }],
   },
   'rpt-bank-balances': {
-    path: '/dashboard',
+    path: '/reports/bank-book',
     columns: [t('code', 'Account', 90), t('name', 'Bank / Cash Account', 300), m('balance', 'Balance', 150)],
-    rows: (x: J) => [...x.cash, totalRow(x.cash, 'name', ['balance'], 'Total cash & bank')],
+    rows: (x: J) => { const rs = (x.books as J[]).map((b) => ({ code: b.code, name: b.name, balance: b.closing })); return [...rs, totalRow(rs, 'name', ['balance'], `Total cash & bank as of ${x.to}`)]; },
   },
   'rpt-bank-book': {
     path: '/reports/bank-book',

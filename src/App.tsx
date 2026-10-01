@@ -17,6 +17,8 @@ import { PrintDoc, type PrintKind } from './components/PrintDoc';
 import { EntryHeader, entryView, isEntrySheet, openDocsPath, postEntrySheet, toOpenDocs, useEntryStores } from './components/EntrySheets';
 import { isToolSheet, ToolHeader, toolPath, toolView, useAssets, useToolStores } from './components/AccountingSheets';
 import { REPORT_MENU } from './modules/reportMenu';
+import { dateLabel, datedPath, defaultDates, filterByDate, type DateState } from './modules/reportDates';
+import { ReportDates } from './components/ReportDates';
 import type { MenuItem } from './components/Ribbon';
 import { DocForm } from './components/DocForm';
 import { AiPanel } from './components/AiPanel';
@@ -68,10 +70,14 @@ export default function App() {
 
   const screen = screenById(active);
   const spec = live ? LIVE[active] : undefined;
+  // Per-report date filter (kept while the sheet tab stays open).
+  const [reportDates, setReportDates] = useState<Record<string, DateState>>({});
+  const dates = reportDates[active] ?? defaultDates();
+  const specPath = spec ? datedPath(spec.path, spec.dates, dates) : undefined;
   const blocked = !!spec && ((!!spec.payroll && !grant?.canAccessPayroll) || (!!spec.admin && !grant?.canAdminister));
   const liveQuery = useQuery({
-    queryKey: ['sheet', sess.companyId, spec?.path],
-    queryFn: () => api.get<unknown>(spec!.path, sess.companyId!),
+    queryKey: ['sheet', sess.companyId, specPath],
+    queryFn: () => api.get<unknown>(specPath!, sess.companyId!),
     enabled: !!spec && !blocked,
   });
   // Industry profile: which module tabs this company sees (demo shows every module as a preview).
@@ -153,7 +159,8 @@ export default function App() {
       if (blocked) return notice(spec.payroll ? 'You need the payroll grant for this company to see HR & payroll data.' : 'Company administrator access is required.', 'warn');
       if (liveQuery.isPending) return notice('Loading…');
       if (liveQuery.isError) return notice(liveQuery.error.message, 'warn');
-      const rows = (spec.rows ? spec.rows(liveQuery.data) : liveQuery.data) as Row[];
+      const data = filterByDate(liveQuery.data, spec.dates, dates);
+      const rows = (spec.rows ? spec.rows(data, dates) : data) as Row[];
       const hasData = rows.some((r) => !(r._meta as RowMeta | undefined)?.style?.match(/total|grand/));
       return { columns: spec.columns, rows: hasData ? rows : [{ [spec.columns[0].key]: 'No records in this company yet.', _meta: { style: 'muted' } } as Row] };
     })();
@@ -175,7 +182,7 @@ export default function App() {
       rows = [...body, ...tail];
     }
     return { columns, rows };
-  }, [screen, s, draft, filter, sorts, active, live, spec, blocked, liveQuery.data, liveQuery.status, liveQuery.error, sess.me, resolver, entryVersion, lookups.data, openDocs, entryDate, toolVersion, tPath, toolQuery.data, toolQuery.status, toolQuery.error]);
+  }, [screen, s, draft, filter, sorts, active, live, spec, blocked, liveQuery.data, liveQuery.status, liveQuery.error, dates, sess.me, resolver, entryVersion, lookups.data, openDocs, entryDate, toolVersion, tPath, toolQuery.data, toolQuery.status, toolQuery.error]);
 
   // ---------- selection stats (Excel status bar)
   const stats = useMemo(() => {
@@ -210,7 +217,7 @@ export default function App() {
     const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${screen.label.replace(/[^\w]+/g, '-')}.csv`;
+    a.download = `${[screen.label, live && spec?.dates ? dateLabel(spec.dates, dates) : ''].filter(Boolean).join(' ').replace(/[^\w]+/g, '-')}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
     notify(`Exported ${view.rows.length} rows to ${a.download}`);
@@ -539,6 +546,7 @@ export default function App() {
       </div>
 
       <main className="sheet">
+        {live && spec?.dates && !blocked && <ReportDates dm={spec.dates} value={dates} onChange={(v) => setReportDates((p) => ({ ...p, [active]: v }))} />}
         {live && isToolSheet(active) && <ToolHeader id={active} L={lookups.data} data={toolQuery.data} assets={assets} companyId={sess.companyId!} today={entryDate} canPost={!!grant?.canPost} notify={notify} />}
         {live && isEntrySheet(active) && <EntryHeader id={active} L={lookups.data} today={entryDate} ready={view.ready ?? 0} onPost={(d) => postEntry(d)} />}
         {screen.kind === 'journal-entry' && <JeHeader onPost={() => postJv()} onDraft={live ? () => postJv(true) : undefined} hint={live ? 'Type account codes from the Chart of Accounts sheet · Post, or save a draft for approval' : undefined} />}

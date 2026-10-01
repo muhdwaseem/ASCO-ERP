@@ -27,6 +27,8 @@ public class ModulesDbContext(DbContextOptions<ModulesDbContext> options, ICurre
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<Trip> Trips => Set<Trip>();
     public DbSet<AiLog> AiLogs => Set<AiLog>();
+    public DbSet<Prepayment> Prepayments => Set<Prepayment>();
+    public DbSet<PrepaymentRelease> PrepaymentReleases => Set<PrepaymentRelease>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -42,6 +44,8 @@ public class ModulesDbContext(DbContextOptions<ModulesDbContext> options, ICurre
         b.Entity<Vehicle>().ToTable("asco_vehicles").HasIndex(x => new { x.CompanyId, x.PlateNo }).IsUnique();
         b.Entity<Trip>().ToTable("asco_trips").HasIndex(x => new { x.CompanyId, x.TripNo }).IsUnique();
         b.Entity<AiLog>().ToTable("asco_ai_logs");
+        b.Entity<Prepayment>().ToTable("asco_prepayments").HasIndex(x => new { x.CompanyId, x.PrepaymentNo }).IsUnique();
+        b.Entity<PrepaymentRelease>().ToTable("asco_prepayment_releases").HasIndex(x => new { x.PrepaymentId, x.MonthNo }).IsUnique();
 
         foreach (var p in b.Model.GetEntityTypes().SelectMany(t => t.GetProperties()).Where(p => p.ClrType == typeof(decimal) || p.ClrType == typeof(decimal?)))
             p.SetPrecision(18); // scale set below per meaning
@@ -54,6 +58,7 @@ public class ModulesDbContext(DbContextOptions<ModulesDbContext> options, ICurre
 
         Filter<CompanyProfile>(b); Filter<Warehouse>(b); Filter<StockItemSetting>(b); Filter<StockMove>(b); Filter<StockMoveLine>(b);
         Filter<Bom>(b); Filter<BomLine>(b); Filter<ProductionOrder>(b); Filter<Job>(b); Filter<Vehicle>(b); Filter<Trip>(b); Filter<AiLog>(b);
+        Filter<Prepayment>(b); Filter<PrepaymentRelease>(b);
     }
 
     private void Filter<T>(ModelBuilder b) where T : class, IModuleScoped =>
@@ -86,6 +91,20 @@ public class ModulesDbContext(DbContextOptions<ModulesDbContext> options, ICurre
         {
             var creator = db.Database.GetService<IRelationalDatabaseCreator>();
             await creator.CreateTablesAsync();
+            return;
         }
+        // Tables added after a database was first created: run just their part of the create script.
+        await AddMissingAsync(db, "asco_prepayment", () => db.Prepayments.IgnoreQueryFilters().AnyAsync());
+    }
+
+    private static async Task AddMissingAsync(ModulesDbContext db, string tablePrefix, Func<Task<bool>> probe)
+    {
+        try { await probe(); return; }
+        catch { /* table missing */ }
+        var statements = db.Database.GenerateCreateScript()
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(sql => sql.Contains(tablePrefix, StringComparison.Ordinal) && sql.StartsWith("CREATE", StringComparison.OrdinalIgnoreCase));
+        foreach (var sql in statements)
+            await db.Database.ExecuteSqlRawAsync(sql);
     }
 }

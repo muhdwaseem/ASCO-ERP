@@ -3,12 +3,7 @@
 
 import type { LucideIcon } from 'lucide-react';
 import {
-  LayoutDashboard, Sparkles, BookOpen, Scale, BookText, NotebookPen, ScrollText, Users, BadgeDollarSign, FileText, Repeat,
-  ClipboardList, Truck, HandCoins, FileMinus, Clock, ListChecks, ArrowLeftRight, Building2, FilePlus, Banknote, FileX,
-  Receipt, Coins, Package, Ruler, Tags, Boxes, Layers, UserPlus, Car, IdCard, Wallet, FileSpreadsheet, TrendingUp,
-  ChartPie, Waves, ChartColumn, Percent, History, Building, CalendarDays, Network, Landmark, Calculator, Wand2,
-  Split, ShieldCheck, UserCog, ScanLine, TriangleAlert, CircleUser,
-  Warehouse, Factory, Ship, Fuel, Briefcase, ClipboardCheck, Blocks, SlidersHorizontal, Route,
+  LayoutDashboard, Sparkles, BookOpen, Scale, BookText, NotebookPen, ScrollText, Users, BadgeDollarSign, FileText, Repeat, ClipboardList, Truck, HandCoins, FileMinus, Clock, ListChecks, ArrowLeftRight, Building2, FilePlus, Banknote, FileX, Receipt, Coins, Package, Ruler, Tags, Boxes, Layers, UserPlus, Car, IdCard, Wallet, FileSpreadsheet, TrendingUp, ChartPie, Waves, ChartColumn, Percent, History, Building, CalendarDays, Network, Landmark, Calculator, Wand2, Split, ShieldCheck, UserCog, ScanLine, TriangleAlert, CircleUser, Warehouse, Factory, Ship, Fuel, Briefcase, ClipboardCheck, Blocks, SlidersHorizontal, Route, CalendarClock, PackagePlus, CalendarRange, Grid3x3,
 } from 'lucide-react';
 import type { LedgerState } from '../engine/types';
 import {
@@ -30,7 +25,7 @@ export interface Screen {
   group: string;
   icon: LucideIcon;
   color: string;
-  kind?: 'sheet' | 'journal-entry' | 'ai' | 'scan' | 'entry';
+  kind?: 'sheet' | 'journal-entry' | 'ai' | 'scan' | 'entry' | 'tool';
   columns?: Col[];
   rows?: (s: LedgerState) => Row[];
   newForm?: FormKind;
@@ -219,6 +214,30 @@ export const SCREENS: Screen[] = [
   {
     id: 'expense-batch', label: 'Expense Batch', tab: 'Payables', group: 'Fast Entry', icon: Receipt, color: C.red, kind: 'entry',
     note: 'One expense per row; Post all posts every ready row (live mode).',
+  },
+  {
+    id: 'prepay-batch', label: 'New Prepayments', tab: 'Finance', group: 'Prepayments', icon: CalendarRange, color: C.purple, kind: 'entry',
+    note: 'One prepayment per row (rent, insurance, licences paid in advance); saved prepayments are released monthly (live mode).',
+  },
+  {
+    id: 'prepay-schedule', label: 'Prepayment Schedule', tab: 'Finance', group: 'Prepayments', icon: CalendarClock, color: C.teal, kind: 'tool',
+    note: 'Month-by-month release of every prepayment; Run prepayment release posts what is due (live mode).',
+  },
+  {
+    id: 'asset-batch', label: 'New Assets', tab: 'CRM & Assets', group: 'Fixed Assets', icon: PackagePlus, color: C.teal, kind: 'entry',
+    note: 'One asset per row: cost, salvage, life in months, accounts (live mode).',
+  },
+  {
+    id: 'dep-schedule', label: 'Depreciation Schedule', tab: 'CRM & Assets', group: 'Fixed Assets', icon: CalendarClock, color: C.blue, kind: 'tool',
+    note: 'Pick an asset to see every month of its depreciation; dispose (sell/scrap) from the strip (live mode).',
+  },
+  {
+    id: 'gratuity', label: 'Gratuity (EOSB)', tab: 'HR & Payroll', group: 'End of Service', icon: HandCoins, color: C.orange, kind: 'tool',
+    note: 'UAE end-of-service gratuity per employee, month-end provision and leaver settlement (live mode).',
+  },
+  {
+    id: 'cc-pnl', label: 'Cost Centre P&L', tab: 'Reports', group: 'Management', icon: Grid3x3, color: C.green, kind: 'tool',
+    note: 'Income and expenses by cost centre / project, side by side (live mode).',
   },
   {
     id: 'recurring-invoices', label: 'Recurring Invoices', tab: 'Receivables', group: 'Sales', icon: Repeat, color: C.teal,

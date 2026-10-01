@@ -30,5 +30,6 @@ public static class ModuleSetup
         api.MapInventoryEndpoints();
         api.MapManufacturingEndpoints();
         api.MapJobsEndpoints();
+        api.MapAccountingEndpoints();
     }
 }

@@ -208,3 +208,45 @@ public class AiLog : IModuleScoped
     public bool Succeeded { get; set; }
     public DateTime CreatedAtUtc { get; set; }
 }
+
+// ── Prepayments (core accounting — not an optional module) ───────────────────
+/// <summary>A cost paid in advance (rent, insurance, licences) released to expense month by month.
+/// The prepaid balance sits in <see cref="PrepaidAccountId"/>; each release posts Dr expense / Cr prepaid.</summary>
+public class Prepayment : IModuleScoped
+{
+    public int Id { get; set; }
+    public int CompanyId { get; set; }
+    public string PrepaymentNo { get; set; } = "";
+    public string Description { get; set; } = "";
+    public int? VendorId { get; set; }            // C-ERP Vendor.Id (information only)
+    public DateOnly StartDate { get; set; }       // first day of the first month released
+    public int Months { get; set; }
+    public decimal Amount { get; set; }
+    public int PrepaidAccountId { get; set; }     // C-ERP asset account
+    public int ExpenseAccountId { get; set; }     // C-ERP expense account
+    public int? CostCenterId { get; set; }
+    public string? PaymentVoucherNo { get; set; } // set when ASCO posted the payment (Dr prepaid / Cr bank)
+    public bool Cancelled { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAtUtc { get; set; }
+    public List<PrepaymentRelease> Releases { get; set; } = [];
+
+    /// <summary>Equal monthly amounts; the last month takes the rounding remainder so the total is exact.</summary>
+    public decimal MonthAmount(int monthNo)
+    {
+        var each = Math.Round(Amount / Months, 2, MidpointRounding.AwayFromZero);
+        return monthNo < Months ? each : Amount - each * (Months - 1);
+    }
+}
+
+public class PrepaymentRelease : IModuleScoped
+{
+    public int Id { get; set; }
+    public int CompanyId { get; set; }
+    public int PrepaymentId { get; set; }
+    public Prepayment Prepayment { get; set; } = null!;
+    public int MonthNo { get; set; }              // 1..Months
+    public DateOnly Date { get; set; }            // month-end the release was posted on
+    public decimal Amount { get; set; }
+    public string VoucherNo { get; set; } = "";
+}

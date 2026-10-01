@@ -18,6 +18,7 @@ import { JE_COLUMNS, jeEditable, jeEdit, jeRows, JeHeader, postDraft, postDraftL
 import { LiveDocForm, LIVE_TARGET, type LiveFormKind, type LivePrefill } from './components/LiveDocForm';
 import { PrintDoc, type PrintKind } from './components/PrintDoc';
 import { EntryHeader, entryView, isEntrySheet, openDocsPath, postEntrySheet, toOpenDocs, useEntryStores } from './components/EntrySheets';
+import { isToolSheet, ToolHeader, toolPath, toolView, useAssets, useToolStores } from './components/AccountingSheets';
 import { DocForm } from './components/DocForm';
 import { AiPanel } from './components/AiPanel';
 import { ScanBill } from './components/ScanBill';
@@ -97,6 +98,11 @@ export default function App() {
     enabled: live && !!openPath,
   });
   const openDocs = useMemo(() => toOpenDocs(active, openDocsQuery.data), [active, openDocsQuery.data]);
+  // Accounting tool sheets (cost-centre P&L, gratuity, depreciation & prepayment schedules).
+  const toolVersion = useToolStores();
+  const assets = useAssets(live && active === 'dep-schedule', sess.companyId);
+  const tPath = live && isToolSheet(active) ? toolPath(active, entryDate, assets) : undefined;
+  const toolQuery = useQuery({ queryKey: ['sheet', sess.companyId, tPath], queryFn: () => api.get<unknown>(tPath!, sess.companyId!), enabled: !!tPath });
   const resolver: AccountResolver = useMemo(() => {
     if (!live) return demoResolver(s);
     const byCode = new Map((lookups.data?.accounts ?? []).map((a) => [a.code, a]));
@@ -130,6 +136,10 @@ export default function App() {
     if (screen.kind === 'entry' && isEntrySheet(active)) {
       if (!live) return { columns: [{ key: 'msg', label: screen.label, width: 620 }] as Col[], rows: [{ msg: 'Sign in to a live company to use fast entry — it posts straight to the books.', _meta: { style: 'muted' } }] as Row[] };
       return entryView(active, lookups.data, openDocs, entryDate);
+    }
+    if (screen.kind === 'tool' && isToolSheet(active)) {
+      if (!live) return { columns: [{ key: 'msg', label: screen.label, width: 620 }] as Col[], rows: [{ msg: `Sign in to a live company to use ${screen.label} — it works on the real books.`, _meta: { style: 'muted' } }] as Row[] };
+      return toolView(active, tPath ? toolQuery.data : undefined, { pending: !!tPath && toolQuery.isPending, error: tPath && toolQuery.isError ? toolQuery.error.message : undefined });
     }
     if (screen.kind === 'journal-entry') return { columns: JE_COLUMNS, rows: jeRows(resolver, draft), editable: jeEditable, onEdit: jeEdit };
     if (screen.kind === 'ai' || (live && screen.kind === 'scan')) return { columns: [] as Col[], rows: [] as Row[] };
@@ -166,7 +176,7 @@ export default function App() {
       rows = [...body, ...tail];
     }
     return { columns, rows };
-  }, [screen, s, draft, filter, sorts, active, live, spec, blocked, liveQuery.data, liveQuery.status, liveQuery.error, sess.me, resolver, entryVersion, lookups.data, openDocs, entryDate]);
+  }, [screen, s, draft, filter, sorts, active, live, spec, blocked, liveQuery.data, liveQuery.status, liveQuery.error, sess.me, resolver, entryVersion, lookups.data, openDocs, entryDate, toolVersion, tPath, toolQuery.data, toolQuery.status, toolQuery.error]);
 
   // ---------- selection stats (Excel status bar)
   const stats = useMemo(() => {
@@ -522,6 +532,7 @@ export default function App() {
       </div>
 
       <main className="sheet">
+        {live && isToolSheet(active) && <ToolHeader id={active} L={lookups.data} data={toolQuery.data} assets={assets} companyId={sess.companyId!} today={entryDate} canPost={!!grant?.canPost} notify={notify} />}
         {live && isEntrySheet(active) && <EntryHeader id={active} L={lookups.data} today={entryDate} ready={view.ready ?? 0} onPost={(d) => postEntry(d)} />}
         {screen.kind === 'journal-entry' && <JeHeader onPost={() => postJv()} onDraft={live ? () => postJv(true) : undefined} hint={live ? 'Type account codes from the Chart of Accounts sheet · Post, or save a draft for approval' : undefined} />}
         {screen.kind === 'ai' ? (

@@ -48,7 +48,12 @@ function Start-Tunnel {
         $m = Select-String -Path $tlog -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($m) { $url = $m.Matches[0].Value }
     }
-    if ($url) { Set-Content $urlFile $url; Log "Tunnel up: $url" } else { Log "Tunnel started but no link yet - see logs\tunnel.log" }
+    if ($url) {
+        Set-Content $urlFile $url; Log "Tunnel up: $url"
+        # Also on the Desktop, so the current link is easy to find and send after a restart.
+        $desk = Join-Path ([Environment]::GetFolderPath("Desktop")) "ASCO client link.txt"
+        Set-Content $desk "ASCO client test link (changes after a restart):`r`n$url`r`n`r`nUpdated $(Get-Date -Format 'dd MMM yyyy HH:mm')"
+    } else { Log "Tunnel started but no link yet - see logs\tunnel.log" }
     $p
 }
 

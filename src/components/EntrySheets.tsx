@@ -471,7 +471,7 @@ function BatchHeader({ k, ready, onPostAll }: { k: BatchKind; ready: number; onP
 //    asset-batch    New fixed assets  → POST /fixed-assets   (register only — no GL posting)
 //    prepay-batch   New prepayments   → POST /prepayments    (optionally posts the payment)
 
-type FormKind = 'asset-batch' | 'prepay-batch';
+type FormKind = 'asset-batch' | 'prepay-batch' | 'employee-batch';
 type FormRow = Record<string, string> & { result?: string; state?: 'posted' | 'error' };
 interface Field {
   key: string; label: string; width: number; type?: 'money' | 'number';
@@ -549,11 +549,37 @@ const FORM_CFG: Record<FormKind, FormCfg> = {
         prepaidAccountId: prepaid.id, expenseAccountId: expense.id, costCenterId: cc?.id ?? null, paidFromAccountId: bank?.id ?? null, paidDate: bank ? x.start : null } };
     },
   },
+  'employee-batch': {
+  noun: 'employee',
+  hint: 'One employee per row · name, joining date and monthly basic salary are required · Ctrl+Enter saves all ready rows (needs payroll access)',
+  fields: [
+    { key: 'name', label: 'Full Name', width: 200 },
+    { key: 'designation', label: 'Designation', width: 150 },
+    { key: 'joined', label: 'Joining Date', width: 104, init: () => defaultDate },
+    { key: 'basic', label: 'Basic Salary', width: 110, type: 'money' },
+    { key: 'housing', label: 'Housing', width: 100, type: 'money', init: () => '0' },
+    { key: 'transport', label: 'Transport', width: 100, type: 'money', init: () => '0' },
+    { key: 'other', label: 'Other Allow.', width: 100, type: 'money', init: () => '0' },
+    acctField('salaryAcct', 'Salary Expense A/c', expenseOnly, (L) => byName(/salar|wage/i)(expenseOnly(L))),
+    ccField,
+    { key: 'email', label: 'Email (optional)', width: 180 },
+  ],
+  check: (L, x) => {
+    const miss = need(x, 'name', 'type the full name') ?? (isDate(x.joined) ? null : 'joining date must be YYYY-MM-DD') ?? (num(x.basic) > 0 ? null : 'enter the monthly basic salary');
+    if (miss) return { error: miss };
+    const acct = findAcct(expenseOnly(L), x.salaryAcct); if (!acct) return { error: 'choose the salary expense account' };
+    const cc = x.cc ? findCc(L, x.cc) : undefined; if (x.cc && !cc) return { error: `cost centre "${x.cc}" not found` };
+    return { path: '/employees', body: { fullName: x.name.trim(), designation: x.designation || null, costCenterId: cc?.id ?? null, joiningDate: x.joined,
+      basicSalary: num(x.basic), housingAllowance: num(x.housing), transportAllowance: num(x.transport), otherAllowance: num(x.other),
+      mobile: null, email: x.email || null, bankName: null, iban: null, employeeExpenseAccountId: acct.id, notes: null } };
+  },
+  },
 };
 const blankForm = (): FormRow => ({});
 const forms: Record<FormKind, ReturnType<typeof store<FormRow[]>>> = {
   'asset-batch': store(() => Array.from({ length: 12 }, blankForm)),
   'prepay-batch': store(() => Array.from({ length: 12 }, blankForm)),
+  'employee-batch': store(() => Array.from({ length: 12 }, blankForm)),
 };
 const formUsed = (k: FormKind, x: FormRow) => FORM_CFG[k].fields.some((f) => x[f.key]?.trim() && !f.init);
 
@@ -597,8 +623,8 @@ async function postForms(k: FormKind, L: Lookups, companyId: number) {
     const chk = FORM_CFG[k].check(L, x);
     if ('error' in chk) continue;
     try {
-      const res = await api.post<{ number?: string; assetCode?: string; paymentVoucherNo?: string | null; monthly?: number }>(chk.path, chk.body, companyId);
-      const what = [res.number ?? res.assetCode, res.monthly != null ? `${money(res.monthly)}/month` : '', res.paymentVoucherNo ? `paid ${res.paymentVoucherNo}` : ''].filter(Boolean).join(' · ');
+      const res = await api.post<{ number?: string; assetCode?: string; employeeCode?: string; paymentVoucherNo?: string | null; monthly?: number }>(chk.path, chk.body, companyId);
+      const what = [res.number ?? res.assetCode ?? res.employeeCode, res.monthly != null ? `${money(res.monthly)}/month` : '', res.paymentVoucherNo ? `paid ${res.paymentVoucherNo}` : ''].filter(Boolean).join(' · ');
       st.set(st.get().map((y, j) => (j === i ? { ...y, state: 'posted', result: what } : y)));
       posted++;
     } catch (e) {
@@ -628,11 +654,11 @@ function FormHeader({ k, ready, onPostAll }: { k: FormKind; ready: number; onPos
 
 // ================================================================ public facade used by App
 
-export const ENTRY_SHEETS = ['invoice-entry', 'quote-entry', 'bill-entry', 'receipt-batch', 'payment-batch', 'expense-batch', 'asset-batch', 'prepay-batch'] as const;
+export const ENTRY_SHEETS = ['invoice-entry', 'quote-entry', 'bill-entry', 'receipt-batch', 'payment-batch', 'expense-batch', 'asset-batch', 'prepay-batch', 'employee-batch'] as const;
 export type EntryId = (typeof ENTRY_SHEETS)[number];
 export const isEntrySheet = (id: string): id is EntryId => (ENTRY_SHEETS as readonly string[]).includes(id);
 const isDoc = (id: EntryId): id is DocKind => id === 'invoice-entry' || id === 'quote-entry' || id === 'bill-entry';
-const isForm = (id: EntryId): id is FormKind => id === 'asset-batch' || id === 'prepay-batch';
+const isForm = (id: EntryId): id is FormKind => id === 'asset-batch' || id === 'prepay-batch' || id === 'employee-batch';
 
 /** API list a batch sheet needs for its "against invoice/bill" column. */
 export const openDocsPath = (id: string) => (id === 'receipt-batch' ? '/outstanding-invoices' : id === 'payment-batch' ? '/purchase-invoices' : undefined);

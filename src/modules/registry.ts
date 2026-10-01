@@ -231,6 +231,10 @@ export const SCREENS: Screen[] = [
     note: 'Pick an asset to see every month of its depreciation; dispose (sell/scrap) from the strip (live mode).',
   },
   {
+    id: 'employee-batch', label: 'New Employees', tab: 'HR & Payroll', group: 'People', icon: UserPlus, color: C.blue, kind: 'entry',
+    note: 'One employee per row: name, joining date, salary and allowances (live mode, payroll access).',
+  },
+  {
     id: 'gratuity', label: 'Gratuity (EOSB)', tab: 'HR & Payroll', group: 'End of Service', icon: HandCoins, color: C.orange, kind: 'tool',
     note: 'UAE end-of-service gratuity per employee, month-end provision and leaver settlement (live mode).',
   },

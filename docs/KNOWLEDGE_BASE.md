@@ -62,6 +62,7 @@ Browser (React, Excel-style UI) --/api--> ASCO API (.NET 8) --> C-ERP accounting
 | 01 Oct | `a847b63` | Reports ▾ menu in Excel "Get Data" style: 16 Zoho categories, 56 entries, 19 new reports (ratios, VAT 201, bank book, sales by item…) | Organise reports |
 | 01 Oct | `30b0d2f`, `6a2b3c4` | Date filter on every dated report; security hardening; hosting package | Requested; preparing for client testing |
 | 01 Oct | `6112451` | Removed copied helper code (now `sheetKit.ts`) | Found by the code-health check below |
+| 01 Oct | (this commit) | **New Employees** sheet (HR & Payroll), typed into cells like the other batch sheets | Gap found while writing the client test guide: the API could add employees but no screen did, so a fresh hosted copy could not test payroll or gratuity |
 
 Not committed to git: the test data posted in the local demo company Aegis FZE while testing (expenses, a laptop asset, a rent prepayment, two employees). It lives only in `server/Asco.Api/asco_dev.db`.
 
@@ -74,6 +75,7 @@ Not committed to git: the test data posted in the local demo company Aegis FZE w
 | Lint | `npx oxlint src` | No errors. Warnings are dev-only "fast refresh" notices and a few React hook dependency hints in `App.tsx`. The extra dependencies are intentional: they force a refresh when the entry/tool sheets change. |
 | Vulnerable packages | `dotnet list package --vulnerable`, `npm audit` | 0 |
 | Tests | `dotnet test`, `npx vitest run` | 34/34 API, 10/10 unit |
+| Missing screens | Walking the client test script against a clean database | **Found:** no way to add employees in ASCO → fixed (New Employees). Rebuild the hosting package (`deploy\publish.ps1`) before the client starts. |
 
 **Known issues / open items**
 - The demo database contains test postings (see above). Hosted copies use their own clean database.

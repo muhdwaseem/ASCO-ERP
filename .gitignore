@@ -33,3 +33,6 @@ server/**/obj/
 
 # Hosting package (built by deploy/publish.ps1) — never commit the hosted database or its keys
 deploy/out/
+deploy/hosted.env
+deploy/logs/
+deploy/public-url.txt

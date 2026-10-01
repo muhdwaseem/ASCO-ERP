@@ -22,9 +22,24 @@ deploy\out\run-hosted.cmd                        # window 1
 cloudflared tunnel --url http://127.0.0.1:8080   # window 2: prints the https link to send
 ```
 
-- The link only works while this PC is on, awake and both windows are open.
+- The link only works while this PC is on and awake.
 - The address changes each time cloudflared starts.
 - Good for a demo call or a few days of testing.
+
+### Running it unattended (set up 01 Oct 2026)
+
+| Script | What it does |
+|---|---|
+| `deploy\start-public.ps1` | Starts ASCO + the tunnel hidden (no windows to close). A watchdog checks every 20 s and restarts either one if it stops. The current link is written to `deploy\public-url.txt`; logs go to `deploy\logs\`. |
+| `deploy\install-autostart.ps1` | Starts the above at every Windows sign-in (Startup-folder shortcut) and sets sleep-on-mains-power to never. |
+| `deploy\stop-public.ps1` | Takes the link offline. |
+
+- **Password:** the client password lives in `deploy\hosted.env` (git-ignored).
+- **When the link changes:** only when the tunnel restarts, for example after a reboot. Check `deploy\public-url.txt` and send the new link.
+- **What still takes it offline:** shutdown, sleep, an unplugged laptop on battery sleep settings, or no internet.
+- **Security:** nothing is opened on your router or firewall, because the tunnel only connects outward to Cloudflare.
+
+**Without a card:** Cloudflare quick tunnels need no account. Oracle and Azure free tiers ask for a card only to verify identity.
 
 ## Option B: always-on test server (about $5-10 a month)
 

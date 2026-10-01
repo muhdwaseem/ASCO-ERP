@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Col, Row, RowMeta } from '../modules/registry';
 import { api, type Lookups } from '../api/client';
 import { Combo } from './EntrySheets';
+import { d, m, meta, money, n, num, r2, resolve, t } from '../modules/sheetKit';
 
 type J = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Acct = { id: number; code: string; name: string };
@@ -31,21 +32,8 @@ export function useToolStores() {
 }
 
 // ---------------------------------------------------------------- helpers
-const t = (key: string, label: string, width = 120): Col => ({ key, label, width });
-const m = (key: string, label: string, width = 110): Col => ({ key, label, width, type: 'money' });
-const n = (key: string, label: string, width = 70): Col => ({ key, label, width, type: 'number' });
-const d = (key: string, label: string, width = 96): Col => ({ key, label, width, type: 'date' });
-const meta = (style?: RowMeta['style'], indent?: number, formula?: boolean) => ({ _meta: { style, indent, formula: formula ? {} : undefined } as RowMeta });
-const r2 = (x: number) => Math.round(x * 100) / 100;
-const num = (v: string) => Number(v.replace(/,/g, '')) || 0;
-const money = (x: number) => x.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const label = (a: Acct) => `${a.code} · ${a.name}`;
-function find<T extends { code: string }>(list: T[], lbl: (x: T) => string, text: string): T | undefined {
-  const q = text.trim().toLowerCase();
-  if (!q) return undefined;
-  return list.find((x) => lbl(x).toLowerCase() === q) ?? list.find((x) => x.code.toLowerCase() === q.split(' ')[0])
-    ?? (() => { const hits = list.filter((x) => lbl(x).toLowerCase().includes(q)); return hits.length === 1 ? hits[0] : undefined; })();
-}
+const find = <T extends { code: string }>(list: T[], lbl: (x: T) => string, text: string) => resolve(list, lbl, (x) => x.code, text);
 const expenseAccts = (L?: Lookups) => (L?.accounts ?? []).filter((a) => a.type === 'Expense');
 const plAccts = (L?: Lookups) => (L?.accounts ?? []).filter((a) => a.type === 'Expense' || a.type === 'Income');
 const firstOfYear = (today: string) => `${today.slice(0, 4)}-01-01`;

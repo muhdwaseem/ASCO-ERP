@@ -6,6 +6,7 @@ import {
   LayoutDashboard, Sparkles, BookOpen, Scale, BookText, NotebookPen, ScrollText, Users, BadgeDollarSign, FileText, Repeat, ClipboardList, Truck, HandCoins, FileMinus, Clock, ListChecks, ArrowLeftRight, Building2, FilePlus, Banknote, FileX, Receipt, Coins, Package, Ruler, Tags, Boxes, Layers, UserPlus, Car, IdCard, Wallet, FileSpreadsheet, TrendingUp, ChartPie, Waves, ChartColumn, Percent, History, Building, CalendarDays, Network, Landmark, Calculator, Wand2, Split, ShieldCheck, UserCog, ScanLine, TriangleAlert, CircleUser, Warehouse, Factory, Ship, Fuel, Briefcase, ClipboardCheck, Blocks, SlidersHorizontal, Route, CalendarClock, PackagePlus, CalendarRange, Grid3x3,
 } from 'lucide-react';
 import type { LedgerState } from '../engine/types';
+import { d, m, n, t } from './sheetKit';
 import {
   ACC, aging, accountName, balances, balanceSheet, billOutstanding, cashFlow, docTotals, generalLedger, invoiceOutstanding,
   monthlyDepreciation, naturalBalance, partyName, payrollTotals, pnl, r2, trialBalance,
@@ -42,10 +43,6 @@ export const FY_START = `${TODAY.slice(0, 4)}-01-01`;
 
 const C = { blue: '#4f9bea', green: '#33b36b', teal: '#2bb3a8', orange: '#f0a33a', red: '#e5534b', purple: '#a57be8', gold: '#e2c044', gray: '#a0a0a0' };
 
-const t = (key: string, label: string, width = 120): Col => ({ key, label, width });
-const m = (key: string, label: string, width = 110): Col => ({ key, label, width, type: 'money' });
-const d = (key: string, label: string, width = 96): Col => ({ key, label, width, type: 'date' });
-const n = (key: string, label: string, width = 70): Col => ({ key, label, width, type: 'number' });
 
 const meta = (style: RowMeta['style'], extra: Partial<RowMeta> = {}): { _meta: RowMeta } => ({ _meta: { style, ...extra } });
 

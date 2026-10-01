@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, vatFraction, type Lookups } from '../api/client';
+import { money } from '../modules/sheetKit';
 
 export type LiveFormKind = 'sales-invoice' | 'purchase-invoice' | 'receipt' | 'payment' | 'expense' | 'customer' | 'vendor' | 'portal-access' | 'credit-note' | 'debit-note' | 'estimate';
 
@@ -19,7 +20,6 @@ export const LIVE_TARGET: Record<LiveFormKind, string> = {
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
-const money = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 interface Line { itemId: string; description: string; accountId: string; qty: string; price: string; vat: string }
 /** Pre-fill from a scanned bill (or any other source). */
 export interface LivePrefill { partyId?: number; date?: string; reference?: string; lines?: { description: string; qty: string; price: string; vat: string }[] }

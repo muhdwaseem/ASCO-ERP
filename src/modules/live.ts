@@ -1,19 +1,15 @@
 // Live mode: which ASCO API endpoint feeds each sheet, and how its JSON becomes grid rows.
 // Field names are the camelCased C-ERP read models / DTOs from server/Asco.Api/ReadEndpoints.cs.
-import type { Col, Row, RowMeta } from './registry';
+import type { Col, Row } from './registry';
+import { d, m, meta, n, t } from './sheetKit';
 import { REPORT_LIVE } from './reportsLive';
 import { REPORT_DATES, type DateMode, type DateState } from './reportDates';
 
 type J = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 export interface LiveSpec { path: string; columns: Col[]; rows?: (data: any, dates: DateState) => Row[]; payroll?: boolean; admin?: boolean; dates?: DateMode } // eslint-disable-line @typescript-eslint/no-explicit-any
 
-const t = (key: string, label: string, width = 120): Col => ({ key, label, width });
-const m = (key: string, label: string, width = 110): Col => ({ key, label, width, type: 'money' });
-const d = (key: string, label: string, width = 96): Col => ({ key, label, width, type: 'date' });
-const n = (key: string, label: string, width = 70): Col => ({ key, label, width, type: 'number' });
 const pct = (key: string, label: string, width = 70): Col => ({ key, label, width, type: 'pct' });
 
-const meta = (style?: RowMeta['style'], indent?: number, formula?: boolean) => ({ _meta: { style, indent, formula: formula ? {} : undefined } as RowMeta });
 const sum = (rows: J[], k: string) => Math.round(rows.reduce((a, r) => a + (Number(r[k]) || 0), 0) * 100) / 100;
 function total(rows: J[], labelKey: string, keys: string[], label = 'Total'): Row {
   const r: Row = { [labelKey]: label, ...meta('grand', undefined, true) };

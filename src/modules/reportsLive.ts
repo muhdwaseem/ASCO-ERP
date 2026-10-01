@@ -1,18 +1,13 @@
 // Live specs for the extra reports in the Reports ▾ menu (ids rpt-*). Some read ASCO's
 // /reports/* endpoints (ReportEndpoints.cs); the rest regroup lists C-ERP already serves.
 // Ranges are the calendar year to date unless the endpoint says otherwise.
-import type { Col, Row, RowMeta } from './registry';
+import type { Row, RowMeta } from './registry';
 import type { LiveSpec } from './live';
 import type { DateState } from './reportDates';
+import { d, m, meta, n, r2, t } from './sheetKit';
 
 type J = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-const t = (key: string, label: string, width = 120): Col => ({ key, label, width });
-const m = (key: string, label: string, width = 110): Col => ({ key, label, width, type: 'money' });
-const d = (key: string, label: string, width = 96): Col => ({ key, label, width, type: 'date' });
-const n = (key: string, label: string, width = 70): Col => ({ key, label, width, type: 'number' });
-const meta = (style?: RowMeta['style'], indent?: number, formula?: boolean) => ({ _meta: { style, indent, formula: formula ? {} : undefined } as RowMeta });
-const r2 = (x: number) => Math.round(x * 100) / 100;
 const sum = (rows: J[], k: string) => r2(rows.reduce((a, r) => a + (Number(r[k]) || 0), 0));
 const pct = (a: number, b: number) => (b ? `${((a / b) * 100).toFixed(1)}%` : '');
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

@@ -12,8 +12,9 @@
 // Cells that need a customer / vendor / item / account / invoice offer search-as-you-type
 // (Grid optionsFor). Everything posts through the ASCO API → C-ERP's own services.
 import { useState, useSyncExternalStore } from 'react';
-import type { Col, Row, RowMeta } from '../modules/registry';
+import type { Col, Row } from '../modules/registry';
 import { api, vatFraction, type Lookups } from '../api/client';
+import { m, meta, money, n, num, r2, resolve, t } from '../modules/sheetKit';
 
 // ---------------------------------------------------------------- tiny store + helpers
 
@@ -35,13 +36,6 @@ function store<T>(init: () => T) {
   return { get: s.get, set, reset: () => set(init()) };
 }
 
-const num = (v = '') => (v.trim() === '' ? 0 : Number(v.replace(/,/g, '')) || 0);
-const r2 = (n: number) => Math.round(n * 100) / 100;
-const money = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const meta = (style?: RowMeta['style']) => ({ _meta: { style } as RowMeta });
-const t = (key: string, label: string, width = 120): Col => ({ key, label, width });
-const m = (key: string, label: string, width = 110): Col => ({ key, label, width, type: 'money' });
-const n = (key: string, label: string, width = 70): Col => ({ key, label, width, type: 'number' });
 const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
 type Party = { id: number; code: string; name: string; paymentTermsDays?: number };
@@ -52,14 +46,6 @@ const partyLabel = (p: Party) => `${p.code} · ${p.name}`;
 const itemLabel = (i: Item) => `${i.code} · ${i.name}`;
 const acctLabel = (a: Acct) => `${a.code} · ${a.name}`;
 
-/** Resolve typed text to a record: exact label, then code, then a unique "contains" match. */
-function resolve<T>(list: T[], label: (x: T) => string, code: (x: T) => string, text = ''): T | undefined {
-  const q = text.trim().toLowerCase();
-  if (!q) return undefined;
-  return list.find((x) => label(x).toLowerCase() === q)
-    ?? list.find((x) => code(x).toLowerCase() === q.split(' ')[0])
-    ?? (() => { const hits = list.filter((x) => label(x).toLowerCase().includes(q)); return hits.length === 1 ? hits[0] : undefined; })();
-}
 const findParty = (list: Party[], text: string) => resolve(list, partyLabel, (p) => p.code, text);
 const findAcct = (list: Acct[], text: string) => resolve(list, acctLabel, (a) => a.code, text);
 const findItem = (L: Lookups, text: string) => resolve(L.items, itemLabel, (i) => i.code, text);

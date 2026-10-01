@@ -53,7 +53,9 @@ function Start-Tunnel {
 }
 
 $asco = Start-Asco
-$tunnel = Start-Tunnel
+# Reuse a tunnel that is already running (e.g. after updating ASCO), so the client's link stays the same.
+$tunnel = Get-Process cloudflared -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $cf } | Select-Object -First 1
+if ($tunnel -and (Test-Path $urlFile)) { Log "Reusing running tunnel (pid $($tunnel.Id)): $(Get-Content $urlFile)" } else { $tunnel = Start-Tunnel }
 $misses = 0
 while ($true) {
     Start-Sleep 20

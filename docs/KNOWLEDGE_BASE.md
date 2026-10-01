@@ -64,6 +64,7 @@ Browser (React, Excel-style UI) --/api--> ASCO API (.NET 8) --> C-ERP accounting
 | 01 Oct | `6112451` | Removed copied helper code (now `sheetKit.ts`) | Found by the code-health check below |
 | 01 Oct | `5069380` | **New Employees** sheet (HR & Payroll), typed into cells like the other batch sheets | Gap found while writing the client test guide: the API could add employees but no screen did, so a fresh hosted copy could not test payroll or gratuity |
 | 01 Oct | (see git) | Client test link: Cloudflare quick tunnel run by a watchdog (`deploy\start-public.ps1`), autostart at sign-in, no sleep on mains power | Client testing without a card or a paid server |
+| 01 Oct | `a147c13` | Phone-friendly layout (tap a selected cell to type, compact ribbon/strips, 16px inputs, Reports menu opens inline); **bug fix:** first column was hidden under the row numbers after scrolling (desktop too) | Client access from phones |
 
 Not committed to git: the test data posted in the local demo company Aegis FZE while testing (expenses, a laptop asset, a rent prepayment, two employees). It lives only in `server/Asco.Api/asco_dev.db`.
 

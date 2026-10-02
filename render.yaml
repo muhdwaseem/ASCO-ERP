@@ -1,0 +1,15 @@
+# Render Blueprint: New > Blueprint > pick this repo. Free plan = sleeps after 15 min idle and the
+# SQLite data resets when it sleeps or redeploys (fine for demos; use Postgres or a paid disk to keep data).
+services:
+  - type: web
+    name: asco
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: feature/excel-ui
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Required: the password for the demo logins (the published ones are refused). Render asks for it.
+      - key: Security__DemoUsersPassword
+        sync: false

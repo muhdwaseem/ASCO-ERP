@@ -1,0 +1,12 @@
+node_modules
+artifacts
+dist
+deploy/out
+deploy/logs
+deploy/hosted.env
+.playwright-mcp
+.claude
+**/bin
+**/obj
+*.db*
+.git

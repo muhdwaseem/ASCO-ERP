@@ -8,7 +8,10 @@
     <!-- ASCO reuses C-ERP's accounting core unmodified. Point this at another checkout with
          `dotnet build -p:CErpSrc=...` (or the CERP_SRC env var) — see server/README.md. -->
     <CErpSrc Condition="'$(CErpSrc)' == '' And '$(CERP_SRC)' != ''">$(CERP_SRC)</CErpSrc>
-    <CErpSrc Condition="'$(CErpSrc)' == ''">D:\C-ERP\C_ERP-main\src</CErpSrc>
+    <!-- Local dev: the live C-ERP checkout. Anywhere else (Render, CI): the snapshot in vendor/c-erp,
+         refreshed with deploy/refresh-cerp-vendor.ps1. -->
+    <CErpSrc Condition="'$(CErpSrc)' == '' And Exists('D:\C-ERP\C_ERP-main\src')">D:\C-ERP\C_ERP-main\src</CErpSrc>
+    <CErpSrc Condition="'$(CErpSrc)' == ''">$(MSBuildThisFileDirectory)..\..\vendor\c-erp\src</CErpSrc>
   </PropertyGroup>
 
   <ItemGroup>

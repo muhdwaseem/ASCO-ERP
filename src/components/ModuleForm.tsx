@@ -6,9 +6,11 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 
 type J = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-type Source = 'accounts' | 'banks' | 'customers' | 'items' | 'warehouses' | 'boms' | 'jobs' | 'vehicles' | 'invoices' | 'profile';
+type Source = 'accounts' | 'income-accounts' | 'cost-accounts' | 'banks' | 'customers' | 'items' | 'warehouses' | 'boms' | 'jobs' | 'vehicles' | 'invoices' | 'profile';
 const SOURCES: Record<Source, { path: string; pick: (d: any) => { value: string; label: string }[] }> = { // eslint-disable-line @typescript-eslint/no-explicit-any
   accounts: { path: '/lookups', pick: (d) => d.accounts.map((a: J) => ({ value: String(a.id), label: `${a.code} · ${a.name} (${a.type})` })) },
+  'income-accounts': { path: '/lookups', pick: (d) => d.accounts.filter((a: J) => a.type === 'Income').map((a: J) => ({ value: String(a.id), label: `${a.code} · ${a.name}` })) },
+  'cost-accounts': { path: '/lookups', pick: (d) => d.accounts.filter((a: J) => a.type === 'Expense' || (a.type === 'Asset' && /inventor|stock|fixed/i.test(a.category ?? ''))).map((a: J) => ({ value: String(a.id), label: `${a.code} · ${a.name} (${a.type})` })) },
   banks: { path: '/lookups', pick: (d) => d.bankAccounts.map((a: J) => ({ value: String(a.id), label: `${a.code} · ${a.name}` })) },
   customers: { path: '/lookups', pick: (d) => d.customers.map((c: J) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })) },
   items: { path: '/inventory/stockable-items', pick: (d) => d.map((i: J) => ({ value: String(i.id), label: `${i.code} · ${i.name}` })) },
@@ -51,8 +53,8 @@ export const MODULE_FORMS: Record<string, FormSpec> = {
       { key: 'kind', label: 'Kind', type: 'select', options: opt(['Goods', 'Service']), required: true },
       { key: 'unit', label: 'Unit', type: 'text', required: true },
       { key: 'sellingPrice', label: 'Selling price', type: 'number', required: true }, { key: 'costPrice', label: 'Cost price', type: 'number' },
-      { key: 'salesAccountId', label: 'Sales (revenue) account', type: 'select', source: 'accounts', optional: '— none —' },
-      { key: 'purchaseAccountId', label: 'Purchase account', type: 'select', source: 'accounts', optional: '— none —' },
+      { key: 'salesAccountId', label: 'Sales (revenue) account', type: 'select', source: 'income-accounts', optional: '— none —' },
+      { key: 'purchaseAccountId', label: 'Purchase account', type: 'select', source: 'cost-accounts', optional: '— none —' },
     ],
     initial: () => ({ kind: 'Goods', unit: 'Pcs', sellingPrice: '0' }),
     body: (v) => ({ name: v.name, kind: v.kind, unit: v.unit, sellingPrice: n(v.sellingPrice) ?? 0, salesAccountId: n(v.salesAccountId), salesDescription: null, costPrice: n(v.costPrice), purchaseAccountId: n(v.purchaseAccountId), purchaseDescription: null, taxCodeId: null }),

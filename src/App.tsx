@@ -313,6 +313,7 @@ export default function App() {
       ] },
     ],
     Finance: [{ group: 'Post', actions: [{ label: 'Post Voucher', icon: BadgeCheck, color: C.green, needs: 'post', run: () => postJv(), title: 'Post the journal voucher (Ctrl+Enter)' }] }],
+    Items: [{ group: 'New', position: 'start', actions: [{ label: 'New Item', icon: PackagePlus, color: C.green, needs: 'post', run: () => setModuleForm('item') }] }],
     Receivables: [
       { group: 'New', actions: [{ label: 'New Invoice', icon: FileText, color: C.green, ...newDoc('sales-invoice') }, { label: 'New Receipt', icon: HandCoins, color: C.green, ...newDoc('receipt') }, { label: 'New Quotation', icon: ClipboardList, color: C.purple, needs: 'post', run: () => setLiveForm('estimate') }, { label: 'New Credit Note', icon: FileMinus, color: C.red, needs: 'post', run: () => setLiveForm('credit-note') }, { label: 'New Customer', icon: UserPlus, color: C.blue, needs: 'post', run: () => setLiveForm('customer') }] },
       { group: 'Documents', actions: [
@@ -460,7 +461,7 @@ export default function App() {
     if (n === 'admin' && !grant?.canAdminister) return 'Needs company administrator access';
     return null;
   };
-  const liveOnly = (label: string) => !live && (/^(New Customer|New Vendor|Add Missing Months|New Quotation|Print Quotation|Mark Sent|Mark Accepted|Mark Declined|Convert to Invoice|New Credit Note|New Debit Note|Send Reminder|WPS File|Approve Leave|Reject Leave|Portal Access|Configure Industry)$/.test(label) || ['Inventory', 'Manufacturing', 'Jobs'].includes(tab));
+  const liveOnly = (label: string) => !live && (/^(New Item|New Customer|New Vendor|Add Missing Months|New Quotation|Print Quotation|Mark Sent|Mark Accepted|Mark Declined|Convert to Invoice|New Credit Note|New Debit Note|Send Reminder|WPS File|Approve Leave|Reject Leave|Portal Access|Configure Industry)$/.test(label) || ['Inventory', 'Manufacturing', 'Jobs'].includes(tab));
   const ribbonExtra = (extra[tab] ?? []).map((g) => ({
     ...g,
     actions: g.actions.map((a) => {

@@ -70,3 +70,11 @@ A small Linux VM (Hetzner, DigitalOcean, Azure or AWS Lightsail) with your own s
 - use Postgres with backups;
 - restrict `AllowedHosts` to your domain;
 - keep `deploy/out` (database and `keys` folder) out of git and off shared drives.
+
+### Permanent link with ngrok (free account, no card)
+
+1. Sign up at ngrok.com, then copy your **authtoken** and your free **static domain** (Domains page) into `deploy\hosted.env` (`NGROK_AUTHTOKEN=`, `NGROK_DOMAIN=`).
+2. Run `powershell -ExecutionPolicy Bypass -File deploy\switch-to-ngrok.ps1`.
+3. The link stays the same after restarts. Free-plan visitors see a one-time ngrok notice: they click **Visit Site**.
+
+Leaving the two values empty keeps the Cloudflare quick tunnel.

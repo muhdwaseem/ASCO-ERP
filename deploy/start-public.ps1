@@ -38,8 +38,26 @@ function Start-Asco {
     for ($i = 0; $i -lt 60 -and -not (Healthy); $i++) { Start-Sleep 2 }
     Log ("ASCO started (pid {0}), healthy={1}" -f $p.Id, (Healthy)); $p
 }
+# ngrok (permanent link) when NGROK_AUTHTOKEN and NGROK_DOMAIN are set in hosted.env; else a Cloudflare quick tunnel.
+$ngrok = "D:\tools\ngrok\ngrok.exe"
+$useNgrok = [bool]($env:NGROK_AUTHTOKEN -and $env:NGROK_DOMAIN)
+$tunnelExe = if ($useNgrok) { $ngrok } else { $cf }
 function Start-Tunnel {
     $tlog = Join-Path $logs "tunnel.log"
+    if ($useNgrok) {
+        # ngrok reads NGROK_AUTHTOKEN from the environment; the token never goes on a command line.
+        $domain = $env:NGROK_DOMAIN -replace '^https?://', '' -replace '/.*$', ''
+        $p = Start-Process $ngrok -ArgumentList "http", "--url=https://$domain", "--log=stdout", "--log-format=logfmt", "http://127.0.0.1:$port" -WindowStyle Hidden -PassThru `
+            -RedirectStandardOutput $tlog -RedirectStandardError (Join-Path $logs "tunnel.err.log")
+        $url = $null
+        for ($i = 0; $i -lt 30 -and -not $url; $i++) {
+            Start-Sleep 2
+            if ($p.HasExited) { break }
+            if (Select-String -Path $tlog -Pattern 'started tunnel' -Quiet -ErrorAction SilentlyContinue) { $url = "https://$domain" }
+        }
+        if ($url) { Set-Content $urlFile $url; Log "ngrok tunnel up: $url" } else { Log "ngrok did not start - see logs\tunnel.log (check NGROK_AUTHTOKEN / NGROK_DOMAIN)" }
+        return $p
+    }
     $p = Start-Process $cf -ArgumentList "tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:$port" -WindowStyle Hidden -PassThru `
         -RedirectStandardError $tlog -RedirectStandardOutput (Join-Path $logs "tunnel.out.log")
     $url = $null
@@ -59,7 +77,7 @@ function Start-Tunnel {
 
 $asco = Start-Asco
 # Reuse a tunnel that is already running (e.g. after updating ASCO), so the client's link stays the same.
-$tunnel = Get-Process cloudflared -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $cf } | Select-Object -First 1
+$tunnel = Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($tunnelExe)) -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $tunnelExe } | Select-Object -First 1
 if ($tunnel -and (Test-Path $urlFile)) { Log "Reusing running tunnel (pid $($tunnel.Id)): $(Get-Content $urlFile)" } else { $tunnel = Start-Tunnel }
 $misses = 0
 while ($true) {
@@ -67,5 +85,5 @@ while ($true) {
     if ($asco.HasExited) { Log "ASCO stopped (exit $($asco.ExitCode)) - restarting"; $asco = Start-Asco; $misses = 0 }
     elseif (-not (Healthy)) { $misses++; if ($misses -ge 3) { Log "ASCO not answering - restarting"; $asco = Start-Asco; $misses = 0 } }
     else { $misses = 0 }
-    if ($tunnel.HasExited) { Log "Tunnel stopped - restarting (the link will change)"; $tunnel = Start-Tunnel }
+    if ($tunnel.HasExited) { Log "Tunnel stopped - restarting"; Start-Sleep 10; $tunnel = Start-Tunnel }
 }

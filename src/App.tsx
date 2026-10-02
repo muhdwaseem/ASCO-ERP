@@ -14,7 +14,7 @@ import { Ribbon, type ActionGroup } from './components/Ribbon';
 import { JE_COLUMNS, jeEditable, jeEdit, jeRows, JeHeader, postDraft, postDraftLive, demoResolver, useJeDraft, type AccountResolver } from './components/JournalEntry';
 import { LiveDocForm, LIVE_TARGET, type LiveFormKind, type LivePrefill } from './components/LiveDocForm';
 import { PrintDoc, type PrintKind } from './components/PrintDoc';
-import { EntryHeader, entryView, isEntrySheet, openDocsPath, postEntrySheet, toOpenDocs, useEntryStores } from './components/EntrySheets';
+import { EntryHeader, entryView, growEntrySheet, isEntrySheet, openDocsPath, postEntrySheet, toOpenDocs, useEntryStores } from './components/EntrySheets';
 import { isToolSheet, ToolHeader, toolPath, toolView, useAssets, useToolStores } from './components/AccountingSheets';
 import { REPORT_MENU } from './modules/reportMenu';
 import { dateLabel, datedPath, defaultDates, filterByDate, type DateState } from './modules/reportDates';
@@ -557,6 +557,7 @@ export default function App() {
           <ScanBill companyId={cid} onUse={(p) => { setPrefill(p); setLiveForm('purchase-invoice'); }} />
         ) : (
           <Grid columns={view.columns} rows={view.rows} sel={sel} onSel={setSel} zoom={zoom} editable={view.editable} onEdit={view.onEdit} optionsFor={view.optionsFor} onLink={live ? (kind, id) => setPrinting({ kind, id }) : undefined}
+            onGrow={live && isEntrySheet(active) ? (upto) => growEntrySheet(active, upto) : undefined}
             onPasted={(filled, skipped) => notify(filled ? `Pasted ${filled} cell${filled === 1 ? '' : 's'}${skipped ? ` · ${skipped} skipped (calculated or read-only columns)` : ''}` : 'Nothing pasted — these cells are calculated or read-only', filled ? 'ok' : 'err')} />
         )}
       </main>

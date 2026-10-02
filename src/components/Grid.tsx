@@ -35,11 +35,13 @@ interface Props {
   onLink?: (kind: NonNullable<Col['link']>['kind'], id: number) => void;
   /** After a paste: cells filled, and cells skipped because they are read-only or past the sheet. */
   onPasted?: (filled: number, skipped: number) => void;
+  /** Called before a paste with the last data row it needs, so growing sheets can add rows first. */
+  onGrow?: (uptoIndex: number) => void;
 }
 
 const MIN_ROWS = 60;
 
-export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, optionsFor, onLink, onPasted }: Props) {
+export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, optionsFor, onLink, onPasted, onGrow }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   // Touch screens have no keys to start typing: tapping the already-selected cell opens it (and the phone keyboard).
@@ -51,7 +53,7 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
   const matches = options
     ? options.filter((o) => o.toLowerCase().includes(edit!.value.trim().toLowerCase())).slice(0, 8)
     : [];
-  const totalRows = Math.max(MIN_ROWS, rows.length + 20);
+  const totalRows = Math.max(MIN_ROWS, rows.length + 30);
   const totalCols = Math.max(columns.length + 8, 20);
 
   const top = Math.min(sel.r, sel.r2), bottom = Math.max(sel.r, sel.r2);
@@ -135,6 +137,7 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
     const fill = !at && lines.length === 1 && lines[0].length === 1 && (bottom > top || right > left);
     const h = fill ? bottom - top + 1 : lines.length;
     const w = fill ? right - left + 1 : Math.max(...lines.map((l) => l.length));
+    onGrow?.(r0 + h - 2); // data row index of the last pasted row
     let filled = 0, skipped = 0;
     for (let i = 0; i < h; i++) for (let j = 0; j < w; j++) {
       const v = fill ? lines[0][0] : lines[i]?.[j];

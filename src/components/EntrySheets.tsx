@@ -84,6 +84,13 @@ type DocKind = 'invoice-entry' | 'quote-entry' | 'bill-entry';
 interface Line { item: string; description: string; account: string; qty: string; rate: string; vat: string; cc: string }
 interface DocDraft { party: string; date: string; validUntil: string; reference: string; narration: string; cc: string; lines: Line[] }
 const DOC_LINES = 12;
+/** Rows are added 10 at a time once typing or pasting reaches the last two rows of a sheet. */
+const GROW_BY = 10;
+function grown<T>(list: T[], uptoIndex: number, blank: () => T): T[] {
+  if (uptoIndex < list.length - 2) return list;
+  const add = Math.ceil((uptoIndex + 3 - list.length) / GROW_BY) * GROW_BY;
+  return [...list, ...Array.from({ length: add }, blank)];
+}
 const blankLine = (): Line => ({ item: '', description: '', account: '', qty: '', rate: '', vat: '', cc: '' });
 const blankDoc = (): DocDraft => ({ party: '', date: '', validUntil: '', reference: '', narration: '', cc: '', lines: Array.from({ length: DOC_LINES }, blankLine) });
 const docs: Record<DocKind, ReturnType<typeof store<DocDraft>>> = {
@@ -142,9 +149,9 @@ function docView(k: DocKind, L: Lookups) {
   rows.push({ description: status, ...meta(problems.length || (d.party && !partyOk) || !ccOk ? 'warn' : 'muted') });
   return {
     columns: docColumns(k), rows,
-    editable: (r: number, c: number) => r < DOC_LINES && c < LINE_KEYS.length,
+    editable: (r: number, c: number) => r < docs[k].get().lines.length && c < LINE_KEYS.length,
     onEdit: (r: number, c: number, value: string) => docEdit(k, L, r, c, value),
-    optionsFor: (r: number, c: number) => (r >= DOC_LINES ? undefined
+    optionsFor: (r: number, c: number) => (r >= docs[k].get().lines.length ? undefined
       : c === 0 ? L.items.map(itemLabel) : c === 2 ? docAccounts(k, L).map(acctLabel) : c === 5 ? ['5%', '0%'] : c === 6 ? ccOptions(L) : undefined),
   };
 }
@@ -152,7 +159,7 @@ function docView(k: DocKind, L: Lookups) {
 function docEdit(k: DocKind, L: Lookups, r: number, c: number, value: string) {
   const d = docs[k].get();
   const key = LINE_KEYS[c];
-  if (!key || r >= DOC_LINES) return;
+  if (!key || r >= d.lines.length) return;
   const line = { ...d.lines[r], [key]: key === 'qty' || key === 'rate' ? value.replace(/,/g, '') : value };
   if (key === 'vat') line.vat = value.trim() === '' ? '' : value.trim().startsWith('0') ? '0%' : '5%';
   if (key === 'item') {
@@ -171,7 +178,7 @@ function docEdit(k: DocKind, L: Lookups, r: number, c: number, value: string) {
   }
   if (key === 'account') { const a = findAcct(docAccounts(k, L), value); if (a) line.account = acctLabel(a); }
   if (key === 'cc') { const c = findCc(L, value); if (c) line.cc = acctLabel(c); }
-  docs[k].set({ ...d, lines: d.lines.map((l, i) => (i === r ? line : l)) });
+  docs[k].set({ ...d, lines: grown(d.lines.map((l, i) => (i === r ? line : l)), r, blankLine) });
 }
 
 async function postDoc(k: DocKind, L: Lookups, companyId: number, defaultDate: string, asDraft: boolean) {
@@ -331,7 +338,7 @@ function settleView(k: SettleKind, L: Lookups, open: OpenDoc[]) {
   rows.push({ doc: `Total (${ready} ready to post)`, amount: r2(total), _meta: { style: 'grand', formula: {} } });
   return {
     columns: settleColumns(k), rows, ready,
-    editable: (r: number, c: number) => r < rowsIn.length && S_KEYS[c] != null && rowsIn[r].state !== 'posted',
+    editable: (r: number, c: number) => { const live = settles[k].get(); return r < live.length && S_KEYS[c] != null && live[r].state !== 'posted'; },
     onEdit: (r: number, c: number, value: string) => settleEdit(k, L, open, r, c, value),
     optionsFor: (r: number, c: number) => {
       if (r >= rowsIn.length) return undefined;
@@ -359,7 +366,7 @@ function settleEdit(k: SettleKind, L: Lookups, open: OpenDoc[], r: number, c: nu
   if (key === 'mode') x.mode = MODES.find((md) => md.toLowerCase() === value.replace(/\s/g, '').toLowerCase()) ?? value;
   if (key === 'bank') { const b = findAcct(L.bankAccounts, value); if (b) x.bank = acctLabel(b); }
   if (key === 'doc') { const o = findDoc(open, value); if (o) { x.doc = docLabel(o); if (!x.amount) x.amount = String(o.due); } }
-  settles[k].set(rows.map((y, i) => (i === r ? x : y)));
+  settles[k].set(grown(rows.map((y, i) => (i === r ? x : y)), r, blankSettle));
 }
 
 function expView(L: Lookups) {
@@ -381,7 +388,7 @@ function expView(L: Lookups) {
   rows.push({ description: `Total (${ready} ready to post)`, gross: r2(total), _meta: { style: 'grand', formula: {} } });
   return {
     columns: EXPENSE_COLUMNS, rows, ready,
-    editable: (r: number, c: number) => r < rowsIn.length && E_KEYS[c] != null && rowsIn[r].state !== 'posted',
+    editable: (r: number, c: number) => { const live = expenses.get(); return r < live.length && E_KEYS[c] != null && live[r].state !== 'posted'; },
     onEdit: (r: number, c: number, value: string) => expEdit(L, r, c, value),
     optionsFor: (r: number, c: number) => (r >= rowsIn.length ? undefined
       : c === 1 ? L.vendors.map(partyLabel) : c === 3 ? costAccounts(L).map(acctLabel) : c === 5 ? ['5%', '0%'] : c === 7 ? L.bankAccounts.map(acctLabel) : c === 9 ? ccOptions(L) : undefined),
@@ -401,7 +408,7 @@ function expEdit(L: Lookups, r: number, c: number, value: string) {
   if (key === 'bank') { const b = findAcct(L.bankAccounts, value); if (b) x.bank = acctLabel(b); }
   if (key === 'cc') { const c = findCc(L, value); if (c) x.cc = acctLabel(c); }
   if (key === 'vat') x.vat = value.trim() === '' ? '' : value.trim().startsWith('0') ? '0%' : '5%';
-  expenses.set(rows.map((y, i) => (i === r ? x : y)));
+  expenses.set(grown(rows.map((y, i) => (i === r ? x : y)), r, blankExp));
 }
 
 async function postBatch(k: BatchKind, L: Lookups, open: OpenDoc[], companyId: number) {
@@ -599,7 +606,7 @@ function formView(k: FormKind, L: Lookups) {
   });
   return {
     columns, rows, ready,
-    editable: (r: number, c: number) => r < rowsIn.length && c < cfg.fields.length && rowsIn[r].state !== 'posted',
+    editable: (r: number, c: number) => { const live = forms[k].get(); return r < live.length && c < cfg.fields.length && live[r].state !== 'posted'; },
     onEdit: (r: number, c: number, value: string) => {
       const f = cfg.fields[c];
       const cur = forms[k].get();
@@ -608,7 +615,7 @@ function formView(k: FormKind, L: Lookups) {
       if (!formUsed(k, cur[r])) for (const g of cfg.fields) if (g.init && !x[g.key]) x[g.key] = g.init(L);
       x[f.key] = f.type ? value.replace(/,/g, '') : value;
       if (f.pick) { const p = f.pick(L, value); if (p) x[f.key] = p; }
-      forms[k].set(cur.map((y, i) => (i === r ? x : y)));
+      forms[k].set(grown(cur.map((y, i) => (i === r ? x : y)), r, blankForm));
     },
     optionsFor: (r: number, c: number) => (r < rowsIn.length ? cfg.fields[c]?.options?.(L) : undefined),
   };
@@ -667,6 +674,14 @@ export function toOpenDocs(id: string, data: unknown): OpenDoc[] | undefined {
   if (!Array.isArray(data)) return undefined;
   if (id === 'receipt-batch') return data.map((o) => ({ id: o.invoiceId, partyCode: o.customerCode, no: o.invoiceNo, dueDate: o.dueDate, due: o.amountDue }));
   return data.filter((o) => o.balance > 0).map((o) => ({ id: o.invoiceId, partyCode: o.vendorCode, no: o.invoiceNo, dueDate: o.dueDate, due: o.balance }));
+}
+
+/** Make sure a sheet has rows up to data row `uptoIndex` (before a long paste). */
+export function growEntrySheet(id: EntryId, uptoIndex: number) {
+  if (isDoc(id)) { const d = docs[id].get(); const lines = grown(d.lines, uptoIndex, blankLine); if (lines !== d.lines) docs[id].set({ ...d, lines }); return; }
+  if (isForm(id)) { const v = forms[id].get(); const n = grown(v, uptoIndex, blankForm); if (n !== v) forms[id].set(n); return; }
+  if (id === 'expense-batch') { const v = expenses.get(); const n = grown(v, uptoIndex, blankExp); if (n !== v) expenses.set(n); return; }
+  const v = settles[id].get(); const n = grown(v, uptoIndex, blankSettle); if (n !== v) settles[id].set(n);
 }
 
 export function entryView(id: EntryId, L: Lookups | undefined, open: OpenDoc[] | undefined, today: string) {

@@ -1,6 +1,6 @@
 // Excel-style grid: column letters, row numbers, header row, active cell, range selection,
 // keyboard navigation, copy-as-TSV, in-cell editing for editable sheets.
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import type { Cell, Col, Row, RowMeta } from '../modules/registry';
 
 export interface Sel { r: number; c: number; r2: number; c2: number }
@@ -33,11 +33,13 @@ interface Props {
   optionsFor?: (r: number, c: number) => string[] | undefined;
   /** Clicking a linked cell (Col.link) opens that document. */
   onLink?: (kind: NonNullable<Col['link']>['kind'], id: number) => void;
+  /** After a paste: cells filled, and cells skipped because they are read-only or past the sheet. */
+  onPasted?: (filled: number, skipped: number) => void;
 }
 
 const MIN_ROWS = 60;
 
-export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, optionsFor, onLink }: Props) {
+export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, optionsFor, onLink, onPasted }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   // Touch screens have no keys to start typing: tapping the already-selected cell opens it (and the phone keyboard).
@@ -111,11 +113,42 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
     else if (k === 'ArrowLeft' || (k === 'Tab' && e.shiftKey)) { e.preventDefault(); move(0, -1, e.shiftKey && k !== 'Tab'); }
     else if (k === 'Enter' && !e.ctrlKey) { e.preventDefault(); move(e.shiftKey ? -1 : 1, 0, false); }
     else if (k === 'F2' && canEdit(sel.r, sel.c)) { e.preventDefault(); startEdit(sel.r, sel.c, String(cellValue(rows[sel.r - 1], columns[sel.c]) ?? '')); }
-    else if ((k === 'Delete' || k === 'Backspace') && canEdit(sel.r, sel.c)) { e.preventDefault(); onEdit?.(sel.r - 1, sel.c, ''); }
+    else if (k === 'Delete' || k === 'Backspace') {
+      let any = false;
+      for (let r = top; r <= bottom; r++) for (let c = left; c <= right; c++) if (canEdit(r, c)) { any = true; onEdit?.(r - 1, c, ''); }
+      if (any) e.preventDefault();
+    }
+    else if (e.ctrlKey && k.toLowerCase() === 'x') { e.preventDefault(); copySelection(); for (let r = top; r <= bottom; r++) for (let c = left; c <= right; c++) if (canEdit(r, c)) onEdit?.(r - 1, c, ''); }
     else if (k === 'Home') { e.preventDefault(); onSel({ r: e.ctrlKey ? 0 : sel.r, c: 0, r2: e.ctrlKey ? 0 : sel.r, c2: 0 }); }
     else if (e.ctrlKey && k.toLowerCase() === 'a') { e.preventDefault(); onSel({ r: 0, c: 0, r2: rows.length, c2: columns.length - 1 }); }
     else if (e.ctrlKey && k.toLowerCase() === 'c') { e.preventDefault(); copySelection(); }
     else if (k.length === 1 && !e.ctrlKey && !e.metaKey && canEdit(sel.r, sel.c)) { e.preventDefault(); startEdit(sel.r, sel.c, k); }
+  };
+
+  /** Paste tab/new-line separated text (from Excel, Google Sheets or these grids) at the selection, cell by cell
+   * like Excel: column j of the clipboard lands in column (left + j); read-only cells are skipped. One value
+   * pasted over a selected range fills every cell of it. */
+  const pasteText = (text: string, at?: { r: number; c: number }) => {
+    if (!onEdit) return false;
+    const lines = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n').map((l) => l.split('\t'));
+    const r0 = at?.r ?? top, c0 = at?.c ?? left;
+    const fill = !at && lines.length === 1 && lines[0].length === 1 && (bottom > top || right > left);
+    const h = fill ? bottom - top + 1 : lines.length;
+    const w = fill ? right - left + 1 : Math.max(...lines.map((l) => l.length));
+    let filled = 0, skipped = 0;
+    for (let i = 0; i < h; i++) for (let j = 0; j < w; j++) {
+      const v = fill ? lines[0][0] : lines[i]?.[j];
+      if (v === undefined) continue;
+      if (canEdit(r0 + i, c0 + j)) { onEdit(r0 + i - 1, c0 + j, v.trim()); filled++; } else if (v.trim()) skipped++;
+    }
+    onSel({ r: r0, c: c0, r2: Math.min(r0 + h - 1, totalRows - 1), c2: Math.min(c0 + w - 1, totalCols - 1) });
+    onPasted?.(filled, skipped);
+    return true;
+  };
+  const onPaste = (e: ClipboardEvent<HTMLDivElement>) => {
+    if (edit) return; // pasting inside an open cell is handled by its input
+    const text = e.clipboardData.getData('text/plain');
+    if (text && pasteText(text)) e.preventDefault();
   };
 
   const copySelection = () => {
@@ -145,7 +178,7 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
   const widths = Array.from({ length: totalCols }, (_, i) => columns[i]?.width ?? 80);
 
   return (
-    <div className="grid-wrap" ref={wrap} tabIndex={0} onKeyDown={onKey} style={{ fontSize: `${(14.5 * zoom) / 100}px` }}>
+    <div className="grid-wrap" ref={wrap} tabIndex={0} onKeyDown={onKey} onPaste={onPaste} style={{ fontSize: `${(14.5 * zoom) / 100}px` }}>
       <table className="grid" style={{ width: widths.reduce((a, b) => a + (b * zoom) / 100, 44) }}>
         <colgroup>
           <col style={{ width: 44 }} />
@@ -198,6 +231,12 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
                             value={edit.value}
                             onChange={(e) => { setEdit({ ...edit, value: e.target.value }); setHi(-1); }}
                             onBlur={() => commitPick(0, 0)}
+                            onPaste={(e) => {
+                              const text = e.clipboardData.getData('text/plain');
+                              if (!/[\t\n]/.test(text.replace(/\r?\n$/, ''))) return; // a single value: normal paste into this cell
+                              e.preventDefault(); committed.current = true; setEdit(null); setHi(-1);
+                              pasteText(text, { r, c }); wrap.current?.focus();
+                            }}
                             onKeyDown={(e) => {
                               if (e.key === 'ArrowDown' && matches.length) { e.preventDefault(); setHi((h) => Math.min(matches.length - 1, h + 1)); }
                               else if (e.key === 'ArrowUp' && matches.length) { e.preventDefault(); setHi((h) => Math.max(-1, h - 1)); }

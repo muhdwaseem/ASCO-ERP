@@ -54,7 +54,7 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
     ? options.filter((o) => o.toLowerCase().includes(edit!.value.trim().toLowerCase())).slice(0, 8)
     : [];
   const totalRows = Math.max(MIN_ROWS, rows.length + 30);
-  const totalCols = Math.max(columns.length + 8, 20);
+  const totalCols = Math.max(columns.length, 1); // no empty spreadsheet columns past the data
 
   const top = Math.min(sel.r, sel.r2), bottom = Math.max(sel.r, sel.r2);
   const left = Math.min(sel.c, sel.c2), right = Math.max(sel.c, sel.c2);
@@ -181,22 +181,11 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
   const widths = Array.from({ length: totalCols }, (_, i) => columns[i]?.width ?? 80);
 
   return (
-    <div className="grid-wrap" ref={wrap} tabIndex={0} onKeyDown={onKey} onPaste={onPaste} style={{ fontSize: `${(14.5 * zoom) / 100}px` }}>
-      <table className="grid" style={{ width: widths.reduce((a, b) => a + (b * zoom) / 100, 44) }}>
+    <div className={`grid-wrap${editable ? ' form-mode' : ''}`} ref={wrap} tabIndex={0} onKeyDown={onKey} onPaste={onPaste} style={{ fontSize: `${(14.5 * zoom) / 100}px` }}>
+      <table className="grid" style={{ width: widths.reduce((a, b) => a + (b * zoom) / 100, 0) }}>
         <colgroup>
-          <col style={{ width: 44 }} />
           {widths.map((w, i) => <col key={i} style={{ width: (w * zoom) / 100 }} />)}
         </colgroup>
-        <thead>
-          <tr>
-            <th className="corner" onMouseDown={() => onSel({ r: 0, c: 0, r2: rows.length, c2: columns.length - 1 })}><span /></th>
-            {widths.map((_, c) => (
-              <th key={c} className={c >= left && c <= right ? 'col-h on' : 'col-h'} onMouseDown={(e) => { e.preventDefault(); onSel({ r: 0, c, r2: rows.length, c2: c }); }}>
-                {colName(c)}
-              </th>
-            ))}
-          </tr>
-        </thead>
         <tbody>
           {Array.from({ length: totalRows }, (_, r) => {
             const row = r === 0 ? undefined : rows[r - 1];
@@ -204,7 +193,6 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
             const cls = [r === 0 ? 'hdr' : '', m?.style ? `st-${m.style}` : ''].join(' ');
             return (
               <tr key={r} className={cls}>
-                <th className={r >= top && r <= bottom ? 'row-h on' : 'row-h'} onMouseDown={(e) => { e.preventDefault(); onSel({ r, c: 0, r2: r, c2: Math.max(columns.length - 1, 0) }); }}>{r + 1}</th>
                 {widths.map((_, c) => {
                   const col = columns[c];
                   const inSel = r >= top && r <= bottom && c >= left && c <= right;

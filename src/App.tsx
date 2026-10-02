@@ -9,7 +9,7 @@ import { store, useLedger } from './engine/store';
 import { markPayrollPaid, PostingError, postPayroll, runDepreciation } from './engine/ledger';
 import { SCREENS, TABS, MODULE_TABS, screenById, type FormKind, type Row, type RowMeta, type Col, type Screen } from './modules/registry';
 import { ModuleForm, MODULE_FORMS } from './components/ModuleForm';
-import { Grid, colName, fmt, cellValue, type Sel } from './components/Grid';
+import { Grid, fmt, cellValue, type Sel } from './components/Grid';
 import { Ribbon, type ActionGroup } from './components/Ribbon';
 import { JE_COLUMNS, jeEditable, jeEdit, jeRows, JeHeader, postDraft, postDraftLive, demoResolver, useJeDraft, type AccountResolver } from './components/JournalEntry';
 import { LiveDocForm, LIVE_TARGET, type LiveFormKind, type LivePrefill } from './components/LiveDocForm';
@@ -206,7 +206,7 @@ export default function App() {
   const activeMeta = activeRow?._meta as RowMeta | undefined;
   const rawActive = sel.r === 0 ? activeCol?.label : cellValue(activeRow, activeCol);
   const formula = activeMeta?.formula && activeCol?.type === 'money' && typeof rawActive === 'number'
-    ? `=SUM(${colName(sel.c)}2:${colName(sel.c)}${sel.r})`
+    ? `=SUM(${activeCol.label} above)`
     : rawActive === undefined ? '' : typeof rawActive === 'number' ? String(rawActive) : String(rawActive);
   const editableActive = !!view.editable && sel.r >= 1 && view.editable(sel.r - 1, sel.c);
 
@@ -531,7 +531,7 @@ export default function App() {
       </div>
 
       <div className="formulabar">
-        <div className="namebox">{screen.kind === 'ai' || (live && screen.kind === 'scan') ? '' : `${colName(sel.c)}${sel.r + 1}`}<ChevronDown size={12} /></div>
+        <div className="namebox">{screen.kind === 'ai' || (live && screen.kind === 'scan') ? '' : sel.r === 0 ? activeCol?.label ?? '' : `${activeCol?.label ?? ''} · row ${sel.r}`}<ChevronDown size={12} /></div>
         <div className="fb-sep">⋮</div>
         <button className="fb-btn" disabled><X size={16} /></button>
         <button className="fb-btn" disabled><Check size={16} /></button>

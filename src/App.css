@@ -31,8 +31,6 @@
   --cell-group: #f3f6f8;
   --cell-entry: #fffcf5;         /* cells you can type into */
   --cell-hover: #f6faf9;
-  --field-border: #cdd5dd;
-  --field-border-hover: #9fb0bd;
 }
 
 .app { display: grid; grid-template-rows: auto auto auto auto auto 1fr auto auto; grid-template-columns: minmax(0, 1fr); height: 100vh; width: 100vw; overflow: hidden; }
@@ -88,7 +86,7 @@
 
 /* formula bar */
 .formulabar { display: flex; align-items: center; height: 34px; background: var(--chrome-1); padding: 4px 6px; gap: 4px; }
-.namebox { width: 200px; height: 24px; display: flex; align-items: center; justify-content: space-between; padding: 0 6px; background: var(--chrome-2); border: 1px solid #4a4a4a; font-size: 13px; }
+.namebox { width: 128px; height: 24px; display: flex; align-items: center; justify-content: space-between; padding: 0 6px; background: var(--chrome-2); border: 1px solid #4a4a4a; font-size: 13px; }
 .fb-sep { color: var(--chrome-dim); padding: 0 6px; }
 .fb-btn { background: none; border: 0; color: #777; padding: 2px 6px; display: grid; place-items: center; }
 .fb-fx { padding: 0 10px; color: var(--chrome-text); font-family: 'Times New Roman', serif; font-size: 15px; }
@@ -98,7 +96,7 @@
 
 /* sheet area */
 .sheet { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--sheet-bg); }
-.grid-wrap { flex: 1; overflow: auto; outline: none; color: var(--sheet-text); font-family: var(--grid-font); scroll-padding: 34px 0 0 0; -webkit-overflow-scrolling: touch; }
+.grid-wrap { flex: 1; overflow: auto; outline: none; color: var(--sheet-text); font-family: var(--grid-font); scroll-padding: 24px 0 0 44px; -webkit-overflow-scrolling: touch; }
 /* ASCO sheet look: a ledger, not a spreadsheet clone. Horizontal rules carry the rows, vertical
    rules are faint, headers are quiet labels, the active cell is a rounded teal focus ring, and
    cells you can type into sit on a warm "entry" tint. */
@@ -120,7 +118,7 @@
 .grid td.link a { color: var(--cell-accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--cell-accent) 40%, transparent); text-underline-offset: 2px; cursor: pointer; font-weight: 600; }
 .grid td.link a:hover { text-decoration-color: currentColor; }
 .grid td.editable.sel { background: var(--sel-fill); }
-.grid tr.hdr td { position: sticky; top: 0; z-index: 3; font-weight: 600; background: var(--sheet-bg); border-bottom: 2px solid var(--cell-accent); color: var(--cell-head-text); font-family: 'Segoe UI', sans-serif; font-size: .8em; letter-spacing: .04em; text-transform: uppercase; }
+.grid tr.hdr td { font-weight: 600; background: var(--sheet-bg); border-bottom: 2px solid var(--cell-accent); color: var(--cell-head-text); font-family: 'Segoe UI', sans-serif; font-size: .8em; letter-spacing: .04em; text-transform: uppercase; }
 .grid tr.st-group td { font-weight: 700; background: var(--cell-group); color: var(--cell-head-text); }
 .grid tr.st-total td { font-weight: 700; border-top: 1px solid var(--cell-rule); }
 .grid tr.st-grand td { font-weight: 700; border-top: 1px solid var(--cell-head-text); border-bottom: 3px double var(--cell-head-text); background: var(--cell-accent-soft); }
@@ -306,18 +304,3 @@
   .rb-menu.rb-sub { position: static; flex-basis: 100%; min-width: 0; box-shadow: none; border: 0; border-left: 2px solid var(--accent); margin: 4px 0 2px 26px; padding: 0; }
   .rb-mi-arrow { top: 6px; transform: rotate(90deg); }
 }
-
-/* Entry sheets (any grid with typeable cells): each typeable cell is drawn as an input box. */
-.grid-wrap.form-mode .grid { border-spacing: 6px 5px; padding: 0 6px 6px; }
-.grid-wrap.form-mode .grid td { border: 0; height: 2.1em; padding: 0 10px; background: transparent; border-radius: 6px; }
-.grid-wrap.form-mode .grid tbody tr:hover td { background: transparent; }
-.grid-wrap.form-mode .grid td.editable,
-.grid-wrap.form-mode .grid tbody tr:hover td.editable { background: #fff; box-shadow: inset 0 0 0 1px var(--field-border); }
-.grid-wrap.form-mode .grid td.editable:hover { box-shadow: inset 0 0 0 1px var(--field-border-hover); }
-.grid-wrap.form-mode .grid td.sel:not(.active) { background: var(--sel-fill); }
-.grid-wrap.form-mode .grid td.active, .grid-wrap.form-mode .grid tbody tr:hover td.active.editable, .grid-wrap.form-mode .grid td.active.editable:hover { outline: none; box-shadow: inset 0 0 0 2px var(--cell-accent), 0 0 0 3px var(--cell-accent-ring); }
-.grid-wrap.form-mode .grid td.editing { background: #fff; }
-.grid-wrap.form-mode .grid tr.hdr td { background: var(--sheet-bg); border-radius: 0; border-bottom: 0; box-shadow: inset 0 -2px 0 var(--cell-accent); padding-top: 6px; }
-.grid-wrap.form-mode .grid tr.st-grand td { border-radius: 0; }
-.grid-wrap.form-mode .cell-input { background: transparent; }
-.namebox { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

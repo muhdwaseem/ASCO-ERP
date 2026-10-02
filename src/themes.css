@@ -1,0 +1,93 @@
+/* Worksheet design templates. Same layout everywhere (ribbon, formula bar, column letters,
+   row numbers, sheet tabs); a template only re-colours and re-styles the sheet area.
+   Chosen in the status bar (bottom right) and remembered per browser.
+     teal     (default) Ledger Teal  - soft row rules, teal focus ring, warm entry cells
+     paper    Account Book           - cream paper, ruled lines, ink-blue, red margin rule
+     slate    Slate                  - cool grey, striped rows, indigo, bold header band
+     midnight Midnight               - dark sheet, cyan accents, for long sessions */
+
+/* ---------- Account Book (paper) ---------- */
+.app[data-sheet-theme="paper"] {
+  --sheet-bg: #fdfaf2;
+  --sheet-text: #1d2a44;
+  --cell-accent: #1f4e8c;
+  --cell-accent-soft: #e8eef8;
+  --cell-accent-ring: rgba(31, 78, 140, 0.18);
+  --cell-hline: #c9d6e6;
+  --cell-vline: #efe8d6;
+  --cell-rule: #8aa0bf;
+  --cell-gutter: #f4ede0;
+  --cell-gutter-text: #a08f6c;
+  --cell-head-text: #1d2a44;
+  --cell-group: #f5efe1;
+  --cell-entry: #fffdf8;
+  --cell-hover: #f7f1e3;
+  --sel-fill: rgba(31, 78, 140, 0.10);
+  --grid-font: Georgia, 'Cambria', serif;
+}
+.app[data-sheet-theme="paper"] .grid .row-h { box-shadow: inset -2px 0 0 #e7a3a3; } /* red margin line of a ledger book */
+.app[data-sheet-theme="paper"] .grid td.num { font-family: 'Consolas', 'Cascadia Mono', monospace; font-size: .92em; }
+.app[data-sheet-theme="paper"] .grid td.link a { font-family: "Segoe UI", sans-serif; font-weight: 600; font-size: .92em; }
+.app[data-sheet-theme="paper"] .grid tr.hdr td { font-family: Georgia, serif; text-transform: none; letter-spacing: 0; font-size: .95em; font-style: italic; border-bottom: 2px solid var(--cell-accent); }
+.app[data-sheet-theme="paper"] .grid td.active { border-radius: 0; box-shadow: none; outline: 2px solid var(--cell-accent); }
+.app[data-sheet-theme="paper"] .entry-header { background: #f6efdf; border-bottom-color: #e2d6bc; }
+
+/* ---------- Slate ---------- */
+.app[data-sheet-theme="slate"] {
+  --sheet-bg: #ffffff;
+  --sheet-text: #1e2430;
+  --cell-accent: #4f46e5;
+  --cell-accent-soft: #eef0ff;
+  --cell-accent-ring: rgba(79, 70, 229, 0.20);
+  --cell-hline: #e6e8ee;
+  --cell-vline: #e6e8ee;
+  --cell-rule: #a3a9b8;
+  --cell-gutter: #eceef3;
+  --cell-gutter-text: #6b7385;
+  --cell-head-text: #ffffff;
+  --cell-group: #e8eaf6;
+  --cell-entry: #ffffff;
+  --cell-hover: #f3f4fb;
+  --sel-fill: rgba(79, 70, 229, 0.10);
+}
+.app[data-sheet-theme="slate"] .grid tbody tr:nth-child(even) td:not(.sel):not(.active) { background: #f8f9fb; }
+.app[data-sheet-theme="slate"] .grid tbody tr:nth-child(even) td.editable:not(.sel):not(.active) { background: #fafbff; }
+.app[data-sheet-theme="slate"] .grid tr.hdr td { background: #2f3747; color: #fff; border-bottom: 0; }
+.app[data-sheet-theme="slate"] .grid tr.st-group td { color: #2f3747; }
+.app[data-sheet-theme="slate"] .grid tr.st-grand td { color: #1e2430; }
+.app[data-sheet-theme="slate"] .grid td.active { border-radius: 2px; }
+.app[data-sheet-theme="slate"] .grid td.editable { box-shadow: inset 0 -1px 0 #c7cbe8; }
+.app[data-sheet-theme="slate"] .entry-header { background: #f1f2f8; border-bottom-color: #dadced; }
+
+/* ---------- Midnight ---------- */
+.app[data-sheet-theme="midnight"] {
+  --sheet-bg: #161b22;
+  --sheet-text: #d9e1ea;
+  --cell-accent: #38bdf8;
+  --cell-accent-soft: #10303f;
+  --cell-accent-ring: rgba(56, 189, 248, 0.22);
+  --cell-hline: #262e38;
+  --cell-vline: #1d242d;
+  --cell-rule: #4b5866;
+  --cell-gutter: #11161c;
+  --cell-gutter-text: #6c7a89;
+  --cell-head-text: #e9f1f8;
+  --cell-group: #1c232c;
+  --cell-entry: #1a2230;
+  --cell-hover: #1c2530;
+  --sel-fill: rgba(56, 189, 248, 0.14);
+  --warn-fill: #3a1d22;
+}
+.app[data-sheet-theme="midnight"] .grid td.neg { color: #ff8a8a; }
+.app[data-sheet-theme="midnight"] .grid tr.st-muted td { color: #6c7a89; }
+.app[data-sheet-theme="midnight"] .grid tr.st-warn td.sel { background: #4a2229; }
+.app[data-sheet-theme="midnight"] .cell-input { background: #0f141a; color: var(--sheet-text); }
+.app[data-sheet-theme="midnight"] .cell-suggest { background: #11161c; }
+.app[data-sheet-theme="midnight"] .cell-suggest div { color: var(--sheet-text); }
+.app[data-sheet-theme="midnight"] .entry-header { background: #11161c; border-bottom-color: #262e38; color: var(--sheet-text); }
+.app[data-sheet-theme="midnight"] .entry-header input,
+.app[data-sheet-theme="midnight"] .entry-header select { background: #0f141a; color: var(--sheet-text); border-color: #2f3a46; }
+.app[data-sheet-theme="midnight"] .entry-header .hint { color: #8a97a6; }
+
+/* theme picker in the status bar */
+.sb-theme { height: 20px; border: 1px solid #4a4a4a; border-radius: 3px; background: var(--chrome-2); color: var(--chrome-text); font-size: 12px; padding: 0 4px; margin-right: 8px; }

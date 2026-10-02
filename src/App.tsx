@@ -57,6 +57,9 @@ export default function App() {
   const [formContext, setFormContext] = useState<{ employeeId: number; name?: string } | undefined>(undefined);
   const [printing, setPrinting] = useState<{ kind: PrintKind; id: number } | null>(null);
   const [backstage, setBackstage] = useState(false);
+  // Worksheet design template (src/themes.css), remembered in this browser.
+  const [sheetTheme, setSheetTheme] = useState(() => { try { return localStorage.getItem('asco.sheetTheme') || 'teal'; } catch { return 'teal'; } });
+  const pickTheme = (t: string) => { setSheetTheme(t); try { localStorage.setItem('asco.sheetTheme', t); } catch { /* storage blocked */ } };
   const [collapsed, setCollapsed] = useState(false);
   const [status, setStatus] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null);
   const [q, setQ] = useState('');
@@ -474,7 +477,7 @@ export default function App() {
   const initials = userName.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
   return (
-    <div className="app">
+    <div className="app" data-sheet-theme={sheetTheme}>
       <header className="titlebar">
         <div className="tb-left"><div className="logo">A</div></div>
         <div className="tb-title">{companyName} - ASCO</div>
@@ -582,6 +585,12 @@ export default function App() {
         {stats.n > 1 && <span className="sb-stat">Average: {fmt({ key: '', label: '', type: 'money' }, stats.avg)}</span>}
         {stats.count > 1 && <span className="sb-stat">Count: {stats.count}</span>}
         {stats.n > 1 && <span className="sb-stat">Sum: {fmt({ key: '', label: '', type: 'money' }, stats.sum)}</span>}
+        <select className="sb-theme" value={sheetTheme} onChange={(e) => pickTheme(e.target.value)} aria-label="Sheet design" title="Sheet design">
+          <option value="teal">Design: Ledger Teal</option>
+          <option value="paper">Design: Account Book</option>
+          <option value="slate">Design: Slate</option>
+          <option value="midnight">Design: Midnight</option>
+        </select>
         <span className="sb-views"><Grid3x3 size={14} className="on" /><Columns3 size={14} /><PanelBottom size={14} /></span>
         <button className="sb-zoom" onClick={() => setZoom((z) => Math.max(60, z - 10))} aria-label="Zoom out"><Minus size={12} /></button>
         <input type="range" min={60} max={160} step={10} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} aria-label="Zoom" />

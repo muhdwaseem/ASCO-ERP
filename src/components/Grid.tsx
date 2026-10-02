@@ -31,11 +31,13 @@ interface Props {
   onEdit?: (r: number, c: number, value: string) => void;
   /** Search-as-you-type choices for a cell (customers, items, accounts…). r = data row index. */
   optionsFor?: (r: number, c: number) => string[] | undefined;
+  /** Clicking a linked cell (Col.link) opens that document. */
+  onLink?: (kind: NonNullable<Col['link']>['kind'], id: number) => void;
 }
 
 const MIN_ROWS = 60;
 
-export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, optionsFor }: Props) {
+export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, optionsFor, onLink }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   // Touch screens have no keys to start typing: tapping the already-selected cell opens it (and the phone keyboard).
@@ -176,11 +178,13 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
                   const num = r > 0 && col && ['money', 'number', 'pct'].includes(col.type ?? '');
                   const neg = typeof raw === 'number' && raw < 0;
                   const ed = r > 0 && canEdit(r, c);
+                  const linkId = r > 0 && col?.link && onLink ? row?.[col.link.idKey ?? 'id'] : undefined;
+                  const isLink = typeof linkId === 'number' && raw !== undefined && raw !== '';
                   return (
                     <td
                       key={c}
                       data-cell={`${r}-${c}`}
-                      className={[isEditing ? 'editing' : '', inSel && !active ? 'sel' : '', active ? 'active' : '', num ? 'num' : '', neg ? 'neg' : '', ed ? 'editable' : '', c <= 1 && !num && m?.indent ? `ind-${m.indent}` : ''].join(' ')}
+                      className={[isEditing ? 'editing' : '', inSel && !active ? 'sel' : '', active ? 'active' : '', num ? 'num' : '', neg ? 'neg' : '', ed ? 'editable' : '', isLink ? 'link' : '', c <= 1 && !num && m?.indent ? `ind-${m.indent}` : ''].join(' ')}
                       onMouseDown={(e) => { e.preventDefault(); down(r, c, e.shiftKey); }}
                       onMouseEnter={() => dragging.current && onSel({ ...sel, r2: r, c2: c })}
                       onDoubleClick={() => ed && startEdit(r, c, String(raw ?? ''))}
@@ -211,7 +215,9 @@ export function Grid({ columns, rows, sel, onSel, zoom, editable, onEdit, option
                           )}
                         </>
                       ) : (
-                        r === 0 ? raw : fmt(col, raw)
+                        r === 0 ? raw : isLink ? (
+                          <a href="#" title={`Open ${raw}`} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.preventDefault(); onSel({ r, c, r2: r, c2: c }); onLink!(col!.link!.kind, linkId as number); }}>{fmt(col, raw)}</a>
+                        ) : fmt(col, raw)
                       )}
                     </td>
                   );

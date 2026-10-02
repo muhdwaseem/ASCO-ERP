@@ -98,6 +98,8 @@
 .grid td.sel { background: var(--sel-fill); }
 .grid td.active { outline: 2px solid var(--accent-2); outline-offset: -2px; position: relative; z-index: 1; }
 .grid td.editable { background: #fbfdfb; }
+.grid td.link a { color: #0b5cad; text-decoration: underline; cursor: pointer; }
+.grid td.link a:hover { color: #07407a; }
 .grid td.editable.sel { background: var(--sel-fill); }
 .grid tr.hdr td { font-weight: 700; background: #e7f2ea; border-bottom: 1px solid #9cc9ad; color: #0f3d24; }
 .grid tr.st-group td { font-weight: 700; background: #f5f5f5; }

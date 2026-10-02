@@ -116,7 +116,7 @@ export const REPORT_LIVE: Record<string, LiveSpec> = {
   },
   'rpt-ar-aging-details': {
     path: '/outstanding-invoices',
-    columns: [t('invoiceNo', 'Invoice No', 140), d('date', 'Date'), d('dueDate', 'Due Date'), t('customerName', 'Customer', 240), n('daysOverdue', 'Days Overdue', 100), m('amountDue', 'Balance Due', 130), t('employeeName', 'Sales Person', 140)],
+    columns: [{ ...t('invoiceNo', 'Invoice No', 140), link: { kind: 'invoice' as const, idKey: 'invoiceId' } }, d('date', 'Date'), d('dueDate', 'Due Date'), t('customerName', 'Customer', 240), n('daysOverdue', 'Days Overdue', 100), m('amountDue', 'Balance Due', 130), t('employeeName', 'Sales Person', 140)],
     rows: (xs: J[]) => [...grouped(xs, (x) => bucket(x.daysOverdue), BUCKETS, 'invoiceNo', ['amountDue']), totalRow(xs, 'invoiceNo', ['amountDue'], 'Total receivable')],
   },
   'rpt-vendor-balances': {

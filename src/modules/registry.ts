@@ -13,7 +13,8 @@ import {
 } from '../engine/ledger';
 
 export type ColType = 'text' | 'money' | 'date' | 'number' | 'pct';
-export interface Col { key: string; label: string; width?: number; type?: ColType }
+/** `link`: the cell opens that document's print preview; the document id is row[idKey ?? 'id']. */
+export interface Col { key: string; label: string; width?: number; type?: ColType; link?: { kind: 'invoice' | 'receipt' | 'quotation'; idKey?: string } }
 export type Cell = string | number | undefined;
 export type Row = { [k: string]: Cell | RowMeta | undefined; _meta?: RowMeta };
 export interface RowMeta { style?: 'group' | 'total' | 'grand' | 'muted' | 'warn'; indent?: number; formula?: Record<string, string> }

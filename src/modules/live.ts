@@ -68,7 +68,7 @@ export const LIVE: Record<string, LiveSpec> = {
   },
   estimates: {
     path: '/estimates',
-    columns: [t('estimateNo', 'Estimate No', 120), d('date', 'Date'), t('customerName', 'Customer', 220), d('validUntil', 'Valid Until'), t('status', 'Status', 90), m('net', 'Net'), m('vat', 'VAT'), m('gross', 'Total')],
+    columns: [{ ...t('estimateNo', 'Estimate No', 120), link: { kind: 'quotation' as const } }, d('date', 'Date'), t('customerName', 'Customer', 220), d('validUntil', 'Valid Until'), t('status', 'Status', 90), m('net', 'Net'), m('vat', 'VAT'), m('gross', 'Total')],
   },
   'delivery-notes': {
     path: '/delivery-notes',
@@ -76,7 +76,7 @@ export const LIVE: Record<string, LiveSpec> = {
   },
   'sales-invoices': {
     path: '/sales-invoices',
-    columns: [t('invoiceNo', 'Invoice No', 120), d('date', 'Date'), t('customerName', 'Customer', 220), d('dueDate', 'Due Date'), m('net', 'Net'), m('vat', 'VAT', 90), m('gross', 'Total'), m('balance', 'Outstanding'), t('status', 'Status', 100), t('salesperson', 'Salesperson', 110)],
+    columns: [{ ...t('invoiceNo', 'Invoice No', 120), link: { kind: 'invoice' as const } }, d('date', 'Date'), t('customerName', 'Customer', 220), d('dueDate', 'Due Date'), m('net', 'Net'), m('vat', 'VAT', 90), m('gross', 'Total'), m('balance', 'Outstanding'), t('status', 'Status', 100), t('salesperson', 'Salesperson', 110)],
     rows: (xs: J[]) => [...xs.map((x) => ({ ...x, ...(x.status === 'Overdue' ? meta('warn') : {}) })), total(xs, 'customerName', ['net', 'vat', 'gross', 'balance'])],
   },
   'recurring-invoices': {
@@ -86,7 +86,7 @@ export const LIVE: Record<string, LiveSpec> = {
   },
   receipts: {
     path: '/receipts',
-    columns: [t('receiptNo', 'Receipt No', 120), d('date', 'Date'), t('customerName', 'Customer', 220), t('invoiceNo', 'Against', 116), t('paymentMode', 'Mode', 110), t('referenceNo', 'Reference', 100), t('bankAccount', 'Deposited To', 180), m('amount', 'Amount'), t('status', 'Status', 70)],
+    columns: [{ ...t('receiptNo', 'Receipt No', 120), link: { kind: 'receipt' as const } }, d('date', 'Date'), t('customerName', 'Customer', 220), t('invoiceNo', 'Against', 116), t('paymentMode', 'Mode', 110), t('referenceNo', 'Reference', 100), t('bankAccount', 'Deposited To', 180), m('amount', 'Amount'), t('status', 'Status', 70)],
     rows: withTotal('customerName', ['amount']),
   },
   'credit-notes': {
@@ -100,7 +100,7 @@ export const LIVE: Record<string, LiveSpec> = {
   },
   outstanding: {
     path: '/outstanding-invoices',
-    columns: [t('invoiceNo', 'Invoice No', 120), d('date', 'Date'), d('dueDate', 'Due Date'), t('customerName', 'Customer', 220), m('amountDue', 'Amount Due'), n('daysOverdue', 'Days Overdue', 90), t('employeeName', 'Salesperson', 130), t('agentName', 'Agent', 120)],
+    columns: [{ ...t('invoiceNo', 'Invoice No', 120), link: { kind: 'invoice' as const, idKey: 'invoiceId' } }, d('date', 'Date'), d('dueDate', 'Due Date'), t('customerName', 'Customer', 220), m('amountDue', 'Amount Due'), n('daysOverdue', 'Days Overdue', 90), t('employeeName', 'Salesperson', 130), t('agentName', 'Agent', 120)],
     rows: (xs: J[]) => [...xs.map((x) => ({ ...x, ...(x.daysOverdue > 0 ? meta('warn') : {}) })), total(xs, 'customerName', ['amountDue'])],
   },
   transactions: {

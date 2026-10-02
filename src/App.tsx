@@ -556,7 +556,7 @@ export default function App() {
         ) : live && screen.kind === 'scan' ? (
           <ScanBill companyId={cid} onUse={(p) => { setPrefill(p); setLiveForm('purchase-invoice'); }} />
         ) : (
-          <Grid columns={view.columns} rows={view.rows} sel={sel} onSel={setSel} zoom={zoom} editable={view.editable} onEdit={view.onEdit} optionsFor={view.optionsFor} />
+          <Grid columns={view.columns} rows={view.rows} sel={sel} onSel={setSel} zoom={zoom} editable={view.editable} onEdit={view.onEdit} optionsFor={view.optionsFor} onLink={live ? (kind, id) => setPrinting({ kind, id }) : undefined} />
         )}
       </main>
 

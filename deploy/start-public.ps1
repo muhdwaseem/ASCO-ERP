@@ -40,22 +40,32 @@ function Start-Asco {
 }
 # ngrok (permanent link) when NGROK_AUTHTOKEN and NGROK_DOMAIN are set in hosted.env; else a Cloudflare quick tunnel.
 $ngrok = "D:\tools\ngrok\ngrok.exe"
-$useNgrok = [bool]($env:NGROK_AUTHTOKEN -and $env:NGROK_DOMAIN)
+$useNgrok = [bool]$env:NGROK_AUTHTOKEN
 $tunnelExe = if ($useNgrok) { $ngrok } else { $cf }
 function Start-Tunnel {
     $tlog = Join-Path $logs "tunnel.log"
     if ($useNgrok) {
         # ngrok reads NGROK_AUTHTOKEN from the environment; the token never goes on a command line.
-        $domain = $env:NGROK_DOMAIN -replace '^https?://', '' -replace '/.*$', ''
-        $p = Start-Process $ngrok -ArgumentList "http", "--url=https://$domain", "--log=stdout", "--log-format=logfmt", "http://127.0.0.1:$port" -WindowStyle Hidden -PassThru `
+        # With NGROK_DOMAIN set that address is used; without it ngrok uses the account's free
+        # permanent dev domain (same address every time) and we read it from ngrok's log.
+        $domain = "$env:NGROK_DOMAIN" -replace '^https?://', '' -replace '/.*$', ''
+        $args = @("http", "--log=stdout", "--log-format=logfmt")
+        if ($domain) { $args += "--url=https://$domain" }
+        $args += "http://127.0.0.1:$port"
+        $p = Start-Process $ngrok -ArgumentList $args -WindowStyle Hidden -PassThru `
             -RedirectStandardOutput $tlog -RedirectStandardError (Join-Path $logs "tunnel.err.log")
         $url = $null
         for ($i = 0; $i -lt 30 -and -not $url; $i++) {
             Start-Sleep 2
             if ($p.HasExited) { break }
-            if (Select-String -Path $tlog -Pattern 'started tunnel' -Quiet -ErrorAction SilentlyContinue) { $url = "https://$domain" }
+            $m = Select-String -Path $tlog -Pattern 'started tunnel.*url=(https://\S+)' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($m) { $url = $m.Matches[0].Groups[1].Value.Trim('"') }
         }
-        if ($url) { Set-Content $urlFile $url; Log "ngrok tunnel up: $url" } else { Log "ngrok did not start - see logs\tunnel.log (check NGROK_AUTHTOKEN / NGROK_DOMAIN)" }
+        if ($url) {
+            Set-Content $urlFile $url; Log "ngrok tunnel up: $url"
+            $desk = Join-Path ([Environment]::GetFolderPath("Desktop")) "ASCO client link.txt"
+            Set-Content $desk "ASCO client test link (permanent - ngrok):`r`n$url`r`n`r`nUpdated $(Get-Date -Format 'dd MMM yyyy HH:mm')"
+        } else { Log "ngrok did not start - see logs\tunnel.log (check NGROK_AUTHTOKEN)" }
         return $p
     }
     $p = Start-Process $cf -ArgumentList "tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:$port" -WindowStyle Hidden -PassThru `

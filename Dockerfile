@@ -24,8 +24,12 @@ WORKDIR /app
 COPY --from=api /app ./
 COPY --from=web /web/dist ./wwwroot
 # Render sets PORT; Program.cs binds 0.0.0.0:$PORT. Data lives in /data (a disk on paid plans, temporary on free).
+# DOTNET_EnableWriteXorExecute=0: avoids a startup crash (exit 139) seen on some hosted container kernels.
 ENV ASPNETCORE_ENVIRONMENT=Production \
+    DOTNET_EnableWriteXorExecute=0 \
+    DOTNET_TieredPGO=0 \
     Database__Provider=Sqlite \
+    Database__SqliteJournalMode=DELETE \
     ConnectionStrings__Sqlite="Data Source=/data/asco.db" \
     Seed__DemoData=true \
     Security__BehindProxy=true \

@@ -21,10 +21,17 @@ internal static class DatabaseStartup
         var sp = scope.ServiceProvider;
         await using var db = await sp.GetRequiredService<IDbContextFactory<AegisDbContext>>().CreateDbContextAsync();
 
+        var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Asco.Startup");
         if (provider == DatabaseProvider.Sqlite)
         {
-            await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;");
+            // WAL needs shared-memory mapping, which some container filesystems refuse; the hosted image
+            // sets Database:SqliteJournalMode=DELETE. Local dev keeps WAL (faster, readers don't block).
+            var journal = config["Database:SqliteJournalMode"] is { Length: > 0 } j && new[] { "WAL", "DELETE", "TRUNCATE", "MEMORY" }.Contains(j.ToUpperInvariant()) ? j.ToUpperInvariant() : "WAL";
+            log.LogInformation("Startup 1/3: opening the SQLite database (journal mode {Mode})", journal);
+            await db.Database.ExecuteSqlRawAsync($"PRAGMA journal_mode={journal};");
+            log.LogInformation("Startup 2/3: creating tables if missing");
             await db.Database.EnsureCreatedAsync();
+            log.LogInformation("Startup 3/3: seeding demo users and data if empty (slow on a small server)");
             await SeedData.EnsureSeededAsync(db,
                 sp.GetRequiredService<UserManager<AppUser>>(),
                 sp.GetRequiredService<RoleManager<IdentityRole>>(),

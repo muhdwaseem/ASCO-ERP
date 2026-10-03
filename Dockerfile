@@ -28,6 +28,12 @@ COPY --from=web /web/dist ./wwwroot
 ENV ASPNETCORE_ENVIRONMENT=Production \
     DOTNET_EnableWriteXorExecute=0 \
     DOTNET_TieredPGO=0 \
+    DOTNET_EnableAVX512F=0 \
+    DOTNET_DbgEnableMiniDump=1 \
+    DOTNET_DbgMiniDumpType=1 \
+    DOTNET_CreateDumpDiagnostics=1 \
+    DOTNET_DbgMiniDumpName=/tmp/asco.dmp \
+    DOTNET_EnableCrashReport=1 \
     Database__Provider=Sqlite \
     Database__SqliteJournalMode=DELETE \
     ConnectionStrings__Sqlite="Data Source=/data/asco.db" \
@@ -37,4 +43,5 @@ ENV ASPNETCORE_ENVIRONMENT=Production \
     PORT=8080
 RUN mkdir -p /data
 EXPOSE 8080
-ENTRYPOINT ["dotnet", "Asco.Api.dll"]
+# Diagnostic wrapper: if ASCO dies, print the exit code and the native crash report into the host's log.
+ENTRYPOINT ["sh", "-c", "dotnet Asco.Api.dll; code=$?; echo \"[asco] process exited with code $code\"; for f in /tmp/asco.dmp.crashreport.json /tmp/asco.dmp.diag.json; do [ -f $f ] && { echo \"[asco] $f\"; head -c 200000 $f | fold -w 3000; echo; }; done; exit $code"]

@@ -14,7 +14,8 @@ import { Ribbon, type ActionGroup } from './components/Ribbon';
 import { JE_COLUMNS, jeEditable, jeEdit, jeRows, JeHeader, postDraft, postDraftLive, demoResolver, useJeDraft, type AccountResolver } from './components/JournalEntry';
 import { LiveDocForm, LIVE_TARGET, type LiveFormKind, type LivePrefill } from './components/LiveDocForm';
 import { PrintDoc, type PrintKind } from './components/PrintDoc';
-import { EntryHeader, entryView, growEntrySheet, isEntrySheet, openDocsPath, postEntrySheet, toOpenDocs, useEntryStores } from './components/EntrySheets';
+import { LineEditor } from './components/LineEditor';
+import { EntryHeader, entryView, growEntrySheet, isDocSheet, isEntrySheet, useEntryMode, openDocsPath, postEntrySheet, toOpenDocs, useEntryStores } from './components/EntrySheets';
 import { isToolSheet, ToolHeader, toolPath, toolView, useAssets, useToolStores } from './components/AccountingSheets';
 import { REPORT_MENU } from './modules/reportMenu';
 import { dateLabel, datedPath, defaultDates, filterByDate, type DateState } from './modules/reportDates';
@@ -91,6 +92,11 @@ export default function App() {
   const tabLabel = (t: string) => (t === 'Jobs' ? (profile.data?.industry === 'Logistics' ? 'Logistics' : profile.data?.industry === 'Construction' ? 'Projects' : 'Jobs') : t);
   const lookups = useQuery({ queryKey: ['lookups', sess.companyId], queryFn: () => api.get<Lookups>('/lookups', sess.companyId!), enabled: live, staleTime: 60_000 });
   // Default entry date: today if its period is open, else the nearest open period.
+  const entryMode = useEntryMode();
+  const lineMode = live && isDocSheet(active) && entryMode === 'lines';
+  // Stock on hand for the item badges (only when the Inventory module is on).
+  const stockQuery = useQuery({ queryKey: ['sheet', sess.companyId, '/inventory/stock'], queryFn: () => api.get<{ itemCode: string; itemTotal: number }[]>('/inventory/stock', sess.companyId!), enabled: lineMode && enabledModules.includes('inventory') });
+  const stockMap = useMemo(() => Object.fromEntries((stockQuery.data ?? []).map((r) => [r.itemCode, r.itemTotal])), [stockQuery.data]);
   const entryDate = useMemo(() => {
     const t0 = new Date().toISOString().slice(0, 10);
     const open = lookups.data?.openPeriods ?? [];
@@ -533,7 +539,7 @@ export default function App() {
         <span className="qat-crumb">{screen.tab} › {screen.group} › <b>{screen.label}</b></span>
       </div>
 
-      <div className="formulabar">
+      {!lineMode && <div className="formulabar">
         <div className="namebox">{screen.kind === 'ai' || (live && screen.kind === 'scan') ? '' : `${colName(sel.c)}${sel.r + 1}`}<ChevronDown size={12} /></div>
         <div className="fb-sep">⋮</div>
         <button className="fb-btn" disabled><X size={16} /></button>
@@ -547,7 +553,7 @@ export default function App() {
         {filter.on && (
           <input className="fb-filter" autoFocus placeholder="Filter rows…" value={filter.text} onChange={(e) => setFilter({ on: true, text: e.target.value })} />
         )}
-      </div>
+      </div>}
 
       <main className="sheet">
         {live && spec?.dates && !blocked && <ReportDates dm={spec.dates} value={dates} onChange={(v) => setReportDates((p) => ({ ...p, [active]: v }))} />}
@@ -558,6 +564,8 @@ export default function App() {
           <AiPanel companyId={live ? cid : undefined} />
         ) : live && screen.kind === 'scan' ? (
           <ScanBill companyId={cid} onUse={(p) => { setPrefill(p); setLiveForm('purchase-invoice'); }} />
+        ) : lineMode && isDocSheet(active) ? (
+          <LineEditor id={active} L={lookups.data} stock={stockMap} onNotice={notify} />
         ) : (
           <Grid columns={view.columns} rows={view.rows} sel={sel} onSel={setSel} zoom={zoom} editable={view.editable} onEdit={view.onEdit} optionsFor={view.optionsFor} onLink={live ? (kind, id) => setPrinting({ kind, id }) : undefined}
             onGrow={live && isEntrySheet(active) ? (upto) => growEntrySheet(active, upto) : undefined}

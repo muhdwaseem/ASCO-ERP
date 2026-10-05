@@ -78,10 +78,17 @@ export function Combo({ value, options, placeholder, onChange }: { value: string
   );
 }
 
+// Lines (line editor) or Grid (spreadsheet) view for invoice / quotation / bill entry; remembered in this browser.
+export type EntryMode = 'lines' | 'grid';
+let entryMode: EntryMode = (() => { try { return localStorage.getItem('asco.entryMode') === 'grid' ? 'grid' : 'lines'; } catch { return 'lines'; } })();
+const modeSubs = new Set<() => void>();
+export function setEntryMode(m: EntryMode) { entryMode = m; try { localStorage.setItem('asco.entryMode', m); } catch { /* storage blocked */ } modeSubs.forEach((f) => f()); }
+export function useEntryMode(): EntryMode { return useSyncExternalStore((cb) => { modeSubs.add(cb); return () => modeSubs.delete(cb); }, () => entryMode); }
+
 // ================================================================ DOCUMENT SHEETS (invoice / quote / bill)
 
 type DocKind = 'invoice-entry' | 'quote-entry' | 'bill-entry';
-interface Line { item: string; description: string; account: string; qty: string; rate: string; vat: string; cc: string }
+interface Line { item: string; description: string; account: string; qty: string; rate: string; vat: string; cc: string; disc: string }
 interface DocDraft { party: string; date: string; validUntil: string; reference: string; narration: string; cc: string; lines: Line[] }
 const DOC_LINES = 12;
 /** Rows are added 10 at a time once typing or pasting reaches the last two rows of a sheet. */
@@ -91,7 +98,7 @@ function grown<T>(list: T[], uptoIndex: number, blank: () => T): T[] {
   const add = Math.ceil((uptoIndex + 3 - list.length) / GROW_BY) * GROW_BY;
   return [...list, ...Array.from({ length: add }, blank)];
 }
-const blankLine = (): Line => ({ item: '', description: '', account: '', qty: '', rate: '', vat: '', cc: '' });
+const blankLine = (): Line => ({ item: '', description: '', account: '', qty: '', rate: '', vat: '', cc: '', disc: '' });
 const blankDoc = (): DocDraft => ({ party: '', date: '', validUntil: '', reference: '', narration: '', cc: '', lines: Array.from({ length: DOC_LINES }, blankLine) });
 const docs: Record<DocKind, ReturnType<typeof store<DocDraft>>> = {
   'invoice-entry': store(blankDoc), 'quote-entry': store(blankDoc), 'bill-entry': store(blankDoc),
@@ -105,11 +112,23 @@ const DOC_CFG = {
 
 const docColumns = (k: DocKind): Col[] => [
   t('item', 'Item (type to search)', 210), t('description', 'Description', 240), t('account', DOC_CFG[k].sales ? 'Revenue Account' : 'Expense Account', 220),
-  n('qty', 'Qty', 70), m('rate', 'Rate', 100), t('vat', 'VAT', 56), t('cc', 'Cost Centre / Project', 170), m('net', 'Net', 110), m('vatAmt', 'VAT Amt', 90), m('total', 'Total', 110),
+  n('qty', 'Qty', 70), m('rate', 'Rate', 100), t('vat', 'VAT', 56), t('cc', 'Cost Centre / Project', 170),
+  ...(k === 'invoice-entry' ? [n('disc', 'Disc %', 70)] : []),
+  m('net', 'Net', 110), m('vatAmt', 'VAT Amt', 90), m('total', 'Total', 110),
 ];
-const LINE_KEYS: (keyof Line)[] = ['item', 'description', 'account', 'qty', 'rate', 'vat', 'cc'];
+/** Editable columns per sheet, in grid order. Only sales invoices carry a per-line discount (C-ERP has no discount on quotes or bills). */
+const lineKeys = (k: DocKind): (keyof Line)[] => (k === 'invoice-entry' ? ['item', 'description', 'account', 'qty', 'rate', 'vat', 'cc', 'disc'] : ['item', 'description', 'account', 'qty', 'rate', 'vat', 'cc']);
 const vatOf = (v: string) => (v.trim() === '' ? 0.05 : v.startsWith('0') ? 0 : 0.05);
 const hasContent = (l: Line) => !!(l.item || l.description || l.account || l.qty || l.rate);
+
+/** One line's money, worked out the way C-ERP does it: discount % comes off qty × rate, VAT on what is left. */
+function lineCalc(k: DocKind, l: Line) {
+  const gross = r2(num(l.qty) * num(l.rate));
+  const pct = k === 'invoice-entry' ? Math.min(100, Math.max(0, num(l.disc))) : 0;
+  const net = k === 'invoice-entry' ? Math.round(num(l.qty) * num(l.rate) * (1 - pct / 100) * 100) / 100 : gross;
+  const vat = r2(net * vatOf(l.vat));
+  return { gross, discount: r2(gross - net), net, vat, total: r2(net + vat) };
+}
 const docParties = (k: DocKind, L: Lookups): Party[] => (DOC_CFG[k].sales ? L.customers : L.vendors);
 const docAccounts = (k: DocKind, L: Lookups): Acct[] => (DOC_CFG[k].sales ? incomeAccounts(L) : costAccounts(L));
 
@@ -119,6 +138,7 @@ function lineProblem(k: DocKind, L: Lookups, l: Line): string | null {
   if (num(l.qty) <= 0) return 'enter a quantity';
   if (l.rate.trim() === '') return 'enter a rate';
   if (l.cc && !findCc(L, l.cc)) return `cost centre "${l.cc}" not found`;
+  if (k === 'invoice-entry' && l.disc.trim() !== '' && (num(l.disc) < 0 || num(l.disc) > 100)) return 'discount must be between 0 and 100 %';
   return null;
 }
 
@@ -127,15 +147,15 @@ function docView(k: DocKind, L: Lookups) {
   let net = 0, vat = 0;
   const problems: string[] = [];
   const rows: Row[] = d.lines.map((l, i) => {
-    if (!hasContent(l)) return { item: '', description: '', account: '', vat: '', cc: '' };
-    const lnNet = r2(num(l.qty) * num(l.rate));
-    const lnVat = r2(lnNet * vatOf(l.vat));
+    if (!hasContent(l)) return { item: '', description: '', account: '', vat: '', cc: '', disc: '' };
+    const c = lineCalc(k, l);
+    const lnNet = c.net, lnVat = c.vat;
     net += lnNet; vat += lnVat;
     const p = lineProblem(k, L, l);
     if (p) problems.push(`Line ${i + 1}: ${p}`);
     return {
       item: l.item, description: l.description, account: l.account, qty: l.qty === '' ? undefined : num(l.qty), rate: l.rate === '' ? undefined : num(l.rate),
-      vat: l.vat || '5%', cc: l.cc, net: lnNet, vatAmt: lnVat, total: r2(lnNet + lnVat), ...(p ? meta('warn') : {}),
+      vat: l.vat || '5%', cc: l.cc, disc: l.disc === '' ? undefined : num(l.disc), net: lnNet, vatAmt: lnVat, total: c.total, ...(p ? meta('warn') : {}),
     };
   });
   const cfg = DOC_CFG[k];
@@ -149,7 +169,7 @@ function docView(k: DocKind, L: Lookups) {
   rows.push({ description: status, ...meta(problems.length || (d.party && !partyOk) || !ccOk ? 'warn' : 'muted') });
   return {
     columns: docColumns(k), rows,
-    editable: (r: number, c: number) => r < docs[k].get().lines.length && c < LINE_KEYS.length,
+    editable: (r: number, c: number) => r < docs[k].get().lines.length && c < lineKeys(k).length,
     onEdit: (r: number, c: number, value: string) => docEdit(k, L, r, c, value),
     optionsFor: (r: number, c: number) => (r >= docs[k].get().lines.length ? undefined
       : c === 0 ? L.items.map(itemLabel) : c === 2 ? docAccounts(k, L).map(acctLabel) : c === 5 ? ['5%', '0%'] : c === 6 ? ccOptions(L) : undefined),
@@ -158,9 +178,9 @@ function docView(k: DocKind, L: Lookups) {
 
 function docEdit(k: DocKind, L: Lookups, r: number, c: number, value: string) {
   const d = docs[k].get();
-  const key = LINE_KEYS[c];
+  const key = lineKeys(k)[c];
   if (!key || r >= d.lines.length) return;
-  const line = { ...d.lines[r], [key]: key === 'qty' || key === 'rate' ? value.replace(/,/g, '') : value };
+  const line = { ...d.lines[r], [key]: key === 'qty' || key === 'rate' || key === 'disc' ? value.replace(/[,%\s]/g, '') : value };
   if (key === 'vat') line.vat = value.trim() === '' ? '' : value.trim().startsWith('0') ? '0%' : '5%';
   if (key === 'item') {
     const it = findItem(L, value);
@@ -195,7 +215,7 @@ async function postDoc(k: DocKind, L: Lookups, companyId: number, defaultDate: s
     const it = l.item ? findItem(L, l.item) : undefined;
     const acctId = findAcct(docAccounts(k, L), l.account)!.id;
     const base = { description: l.description || it?.name || 'Item', costCenterId: findCc(L, l.cc || d.cc)?.id ?? null, quantity: num(l.qty), unitPrice: num(l.rate), vatRate: vatOf(l.vat) };
-    return cfg.sales ? { ...base, revenueAccountId: acctId, ...(k === 'invoice-entry' ? { itemId: it?.id ?? null } : {}) } : { ...base, expenseAccountId: acctId };
+    return cfg.sales ? { ...base, revenueAccountId: acctId, ...(k === 'invoice-entry' ? { itemId: it?.id ?? null, discountValue: num(l.disc), discountType: 'Percent' } : {}) } : { ...base, expenseAccountId: acctId };
   });
   try {
     let res: { number: string };
@@ -219,6 +239,7 @@ async function postDoc(k: DocKind, L: Lookups, companyId: number, defaultDate: s
 }
 
 function DocHeader({ k, L, defaultDate, onPost }: { k: DocKind; L: Lookups | undefined; defaultDate: string; onPost: (draft: boolean) => void }) {
+  const mode = useEntryMode();
   const d = docs[k].get();
   const cfg = DOC_CFG[k];
   const set = (patch: Partial<DocDraft>) => docs[k].set({ ...docs[k].get(), ...patch });
@@ -238,8 +259,12 @@ function DocHeader({ k, L, defaultDate, onPost }: { k: DocKind; L: Lookups | und
       <label style={{ minWidth: 220 }}>Cost centre / Project
         <Combo value={d.cc} placeholder="Optional — for every line" options={L ? ccOptions(L) : []} onChange={(v) => set({ cc: v })} />
       </label>
-      <label className="grow">Narration <input value={d.narration} placeholder="Optional" onChange={(e) => set({ narration: e.target.value })} /></label>
-      <span className="hint">Type in the cells · Tab moves · Ctrl+Enter {k === 'quote-entry' ? 'saves' : 'posts'}</span>
+      {mode === 'grid' ? <label className="grow">Narration <input value={d.narration} placeholder="Optional" onChange={(e) => set({ narration: e.target.value })} /></label> : <span className="grow" />}
+      <span className="hint">{mode === 'grid' ? 'Type in the cells · Tab moves · ' : ''}Ctrl+Enter {k === 'quote-entry' ? 'saves' : 'posts'}</span>
+      <span className="seg-switch" role="group" aria-label="Entry view">
+        <button type="button" className={mode === 'lines' ? 'on' : ''} onClick={() => setEntryMode('lines')}>Lines</button>
+        <button type="button" className={mode === 'grid' ? 'on' : ''} onClick={() => setEntryMode('grid')}>Grid</button>
+      </span>
       <button className="btn ghost" onClick={() => docs[k].reset()}>Clear</button>
       {cfg.canDraft && <button className="btn ghost" onClick={() => onPost(true)}>Save draft</button>}
       <button className="btn primary" onClick={() => onPost(false)}>{cfg.postLabel}</button>
@@ -674,6 +699,54 @@ export function toOpenDocs(id: string, data: unknown): OpenDoc[] | undefined {
   if (!Array.isArray(data)) return undefined;
   if (id === 'receipt-batch') return data.map((o) => ({ id: o.invoiceId, partyCode: o.customerCode, no: o.invoiceNo, dueDate: o.dueDate, due: o.amountDue }));
   return data.filter((o) => o.balance > 0).map((o) => ({ id: o.invoiceId, partyCode: o.vendorCode, no: o.invoiceNo, dueDate: o.dueDate, due: o.balance }));
+}
+
+// ---- API for the line editor (src/components/LineEditor.tsx): same draft store as the grid, so both views stay in step.
+export type { DocKind, Line as DocLine };
+export const isDocSheet = (id: string): id is DocKind => id === 'invoice-entry' || id === 'quote-entry' || id === 'bill-entry';
+export const docState = (k: DocKind) => docs[k].get();
+export const docSet = (k: DocKind, patch: Partial<DocDraft>) => docs[k].set({ ...docs[k].get(), ...patch });
+export const docLineKeys = lineKeys;
+export const docEditCell = docEdit;
+export const docLineCalc = lineCalc;
+export const docLineProblem = lineProblem;
+export const docLineUsed = hasContent;
+export const docCfg = (k: DocKind) => DOC_CFG[k];
+export function docOptions(k: DocKind, L: Lookups) {
+  return { items: L.items.map(itemLabel), accounts: docAccounts(k, L).map(acctLabel), costCentres: ccOptions(L) };
+}
+export const docItem = (L: Lookups, label: string) => findItem(L, label);
+export function docRemoveLine(k: DocKind, r: number) {
+  const d = docs[k].get();
+  const lines = d.lines.filter((_, i) => i !== r);
+  while (lines.length < DOC_LINES) lines.push(blankLine());
+  docs[k].set({ ...d, lines });
+}
+export function docAddLines(k: DocKind, count = 1) {
+  const d = docs[k].get();
+  docs[k].set({ ...d, lines: [...d.lines, ...Array.from({ length: count }, blankLine)] });
+}
+/** Totals, problems and the one-line status shown under the lines (the grid shows the same in its last rows). */
+export function docSummary(k: DocKind, L: Lookups) {
+  const d = docs[k].get();
+  const cfg = DOC_CFG[k];
+  let gross = 0, discount = 0, net = 0, vat = 0;
+  const problems: string[] = [];
+  d.lines.forEach((l, i) => {
+    if (!hasContent(l)) return;
+    const c = lineCalc(k, l);
+    gross += c.gross; discount += c.discount; net += c.net; vat += c.vat;
+    const p = lineProblem(k, L, l);
+    if (p) problems.push(`Line ${i + 1}: ${p}`);
+  });
+  const partyOk = !!findParty(docParties(k, L), d.party);
+  const ccOk = !d.cc || !!findCc(L, d.cc);
+  const status = !d.party ? `Choose the ${cfg.party.toLowerCase()} in the strip above`
+    : !partyOk ? `${cfg.party} "${d.party}" not found`
+    : !ccOk ? `Cost centre "${d.cc}" not found`
+    : problems[0] ?? (net > 0 ? `Ready: press Ctrl+Enter (or ${cfg.postLabel})` : `Add the ${cfg.noun} lines`);
+  const warn = problems.length > 0 || (!!d.party && !partyOk) || !ccOk;
+  return { gross: r2(gross), discount: r2(discount), net: r2(net), vat: r2(vat), total: r2(net + vat), status, warn, ready: !warn && !!d.party && net > 0 };
 }
 
 /** Make sure a sheet has rows up to data row `uptoIndex` (before a long paste). */
